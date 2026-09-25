@@ -64,14 +64,15 @@ jobs:
         uses: Zeglius/titanoboa@7737f4748458252ac827dca14b3d6dd09298472a # revamp-pr, as used by Bazzite
         with:
           image-ref: localhost/payload:latest
-          iso-dest: ${{ matrix.image_name }}-live.iso
+          iso-dest: ${{ github.workspace }}/${{ matrix.image_name }}-live.iso
 
       - name: Checksum
         id: sums
         run: |
           iso="${{ steps.build.outputs.iso-dest }}"
           name="${{ matrix.image_name }}-live.iso"
-          [ "$(basename "$iso")" = "$name" ] || mv "$iso" "$name"
+          # titanoboa may leave the file in its own action directory
+          [ "$(realpath "$iso")" = "$(realpath -m "$name")" ] || mv "$iso" "$name"
           sha256sum "$name" | tee "$name.sha256"
           ls -la "$name"
 
