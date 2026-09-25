@@ -66,6 +66,16 @@ for size in 64 256; do
         "/usr/share/icons/hicolor/${size}x${size}/apps/rimfrost-logo.png"
 done
 
+### Package sources ##########################################################
+# Bazzite ships the terra repos disabled. bootc-image-builder still reads them
+# when making the ISO and fails on their file:// GPG keys, so keep them out of
+# /etc/yum.repos.d. (Updates come as whole images; these repos only matter for
+# someone layering packages, who can copy them back.)
+mkdir -p /usr/share/rimfrost/disabled-repos
+for repo in /etc/yum.repos.d/terra*.repo; do
+    [ -e "$repo" ] && mv "$repo" /usr/share/rimfrost/disabled-repos/
+done
+
 ### Game mode ##################################################################
 # rimfrost-gamemoded gives the focused game the CPU and disk (cgroup weights)
 # and holds the performance power profile; a KWin script reports focus.
@@ -89,3 +99,4 @@ python3 -c 'import ast, sys; [ast.parse(open(f).read(), f) for f in sys.argv[1:]
 test -f /usr/share/kwin/scripts/rimfrost-focus/contents/code/main.js
 systemctl --global is-enabled rimfrost-gamemoded.service
 command -v mangohud
+! ls /etc/yum.repos.d/terra*.repo 2>/dev/null

@@ -39,7 +39,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        disk-type: ["qcow2", "anaconda-iso"]
+        # qcow2 fails on the hosted runner (osbuild cannot mount container
+        # storage); VM disks are built locally with `just build-qcow2`.
+        disk-type: ["anaconda-iso"]
         image_name: ["rimfrost-os", "rimfrost-os-nvidia"]
     permissions:
       contents: read
