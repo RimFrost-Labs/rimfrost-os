@@ -179,8 +179,10 @@ test -f /usr/share/kwin/scripts/rimfrost-focus/contents/code/main.js
 systemctl --global is-enabled rimfrost-gamemoded.service
 command -v mangohud
 ! ls /etc/yum.repos.d/terra*.repo 2>/dev/null
-lsinitrd -f usr/lib/initrd-release "/usr/lib/modules/$KVER/initramfs.img" | grep -q '^DEFAULT_HOSTNAME="rimfrost"'
-getcap /usr/bin/gsr-kms-server | grep -q cap_sys_admin
+# (no "| grep -q" on long output: grep quits early, the writer gets SIGPIPE, pipefail fails)
+lsinitrd -f usr/lib/initrd-release "/usr/lib/modules/$KVER/initramfs.img" > /tmp/initrd-release
+grep -q '^DEFAULT_HOSTNAME="rimfrost"' /tmp/initrd-release
+[[ "$(getcap /usr/bin/gsr-kms-server)" == *cap_sys_admin* ]]
 ! systemctl is-enabled rimfrost-telemetry.service >/dev/null 2>&1
 test -x /usr/lib64/librimfrost_framemeter.so
 test -f /etc/skel/.config/autostart/rimfrost-welcome.desktop
