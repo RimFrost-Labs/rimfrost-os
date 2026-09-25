@@ -143,13 +143,17 @@ class GameMode(dbus.service.Object):
         super().__init__(bus, OBJ_PATH)
         self.session = session
         sysbus = dbus.SystemBus()
+        # follow_name_owner_changes: systemd gets a new bus address on every
+        # daemon-reload; without it the proxy keeps talking to the old one.
         self.systemd = dbus.Interface(
-            session.get_object("org.freedesktop.systemd1", "/org/freedesktop/systemd1"),
+            session.get_object("org.freedesktop.systemd1", "/org/freedesktop/systemd1",
+                               follow_name_owner_changes=True),
             "org.freedesktop.systemd1.Manager")
         try:
             self.power = dbus.Interface(
                 sysbus.get_object("org.freedesktop.UPower.PowerProfiles",
-                                  "/org/freedesktop/UPower/PowerProfiles"),
+                                  "/org/freedesktop/UPower/PowerProfiles",
+                                  follow_name_owner_changes=True),
                 "org.freedesktop.UPower.PowerProfiles")
         except dbus.DBusException:
             self.power = None
@@ -203,14 +207,17 @@ class GameMode(dbus.service.Object):
             self.systemd.StartTransientUnit(unit, "replace", dbus.Array(props, signature="(sv)"),
                                             dbus.Array([], signature="(sa(sv))"))
         except dbus.DBusException as e:
+            # Still a game: keep tracking it (power profile, ClipFrost), just without weights.
             log.warning("could not move %s into %s: %s", gid, unit, e)
-            return
+            unit = None
         self.games[gid] = {"unit": unit, "root": root, "caption": caption, "since": time.time(),
-                           "weight": WEIGHT_FOCUSED}
+                           "weight": WEIGHT_FOCUSED if unit else None}
         log.info("game %s: %d processes from pid %d into %s", gid, len(pids), root, unit)
 
     def weigh(self, gid, weight):
         g = self.games[gid]
+        if not g["unit"]:
+            return
         try:
             self.systemd.SetUnitProperties(g["unit"], True, dbus.Array([
                 ("CPUWeight", dbus.UInt64(weight)),
@@ -247,11 +254,14 @@ class GameMode(dbus.service.Object):
 
     def reap(self):
         for gid, g in list(self.games.items()):
-            try:
-                self.systemd.GetUnit(g["unit"])
-                alive = os.path.exists(f"/proc/{g['root']}") or bool(self.unit_pids(g["unit"]))
-            except dbus.DBusException:
-                alive = False
+            if g["unit"]:
+                try:
+                    self.systemd.GetUnit(g["unit"])
+                    alive = os.path.exists(f"/proc/{g['root']}") or bool(self.unit_pids(g["unit"]))
+                except dbus.DBusException:
+                    alive = False
+            else:
+                alive = os.path.exists(f"/proc/{g['root']}")
             if not alive:
                 log.info("game %s ended", gid)
                 del self.games[gid]
@@ -262,6 +272,8 @@ class GameMode(dbus.service.Object):
         return True
 
     def unit_alive(self, gid):
+        if not self.games[gid]["unit"]:
+            return False
         try:
             self.systemd.GetUnit(self.games[gid]["unit"])
             return True

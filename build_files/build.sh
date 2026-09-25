@@ -66,6 +66,14 @@ for size in 64 256; do
         "/usr/share/icons/hicolor/${size}x${size}/apps/rimfrost-logo.png"
 done
 
+### Recorder ###################################################################
+# GPU Screen Recorder (GPL-3, from Terra) is the capture engine ClipFrost
+# drives as a separate program. Its gsr-kms-server carries cap_sys_admin, so
+# screen capture needs no permission dialog.
+dnf5 -y --enablerepo=terra install gpu-screen-recorder
+# leave no package-manager state behind in /var and /run (bootc lint)
+rm -rf /var/lib/dnf/repos /run/dnf
+
 ### Package sources ##########################################################
 # Bazzite ships the terra repos disabled. bootc-image-builder still reads them
 # when making the ISO and fails on their file:// GPG keys, so keep them out of
@@ -113,3 +121,4 @@ systemctl --global is-enabled rimfrost-gamemoded.service
 command -v mangohud
 ! ls /etc/yum.repos.d/terra*.repo 2>/dev/null
 lsinitrd -f usr/lib/initrd-release "/usr/lib/modules/$KVER/initramfs.img" | grep -q '^DEFAULT_HOSTNAME="rimfrost"'
+getcap /usr/bin/gsr-kms-server | grep -q cap_sys_admin
