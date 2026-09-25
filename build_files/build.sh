@@ -86,6 +86,18 @@ printf '[Plugins]\nrimfrost-focusEnabled=true\n' >> /etc/xdg/kwinrc
 # MangoHud (FPS overlay, frame-time logs for measuring game mode) comes with
 # Bazzite as terra-mangohud.
 
+### Initramfs ##################################################################
+# Rebuild it with Bazzite's own dracut settings so early boot carries our
+# os-release (systemd's fallback hostname comes from there, and the installer
+# leaves /etc/hostname empty).
+KVER=$(ls /usr/lib/modules | head -1)
+export DRACUT_NO_XATTR=1
+# /root points at /var/roothome, which only exists on a booted system
+mkdir -p /var/roothome
+dracut --no-hostonly --kver "$KVER" --reproducible --zstd --add ostree -f "/usr/lib/modules/$KVER/initramfs.img"
+chmod 0600 "/usr/lib/modules/$KVER/initramfs.img"
+rmdir /var/roothome
+
 ### Checks #####################################################################
 grep -q 'RimFrost OS' /usr/lib/os-release
 grep -q 'set-hostname rimfrost' /usr/libexec/bazzite-hardware-setup
@@ -100,3 +112,4 @@ test -f /usr/share/kwin/scripts/rimfrost-focus/contents/code/main.js
 systemctl --global is-enabled rimfrost-gamemoded.service
 command -v mangohud
 ! ls /etc/yum.repos.d/terra*.repo 2>/dev/null
+lsinitrd -f usr/lib/initrd-release "/usr/lib/modules/$KVER/initramfs.img" | grep -q '^DEFAULT_HOSTNAME="rimfrost"'
