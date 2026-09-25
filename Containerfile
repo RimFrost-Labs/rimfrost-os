@@ -2,12 +2,19 @@
 # and newer). The build workflow passes BASE_IMAGE and IMAGE_NAME per variant.
 ARG BASE_IMAGE=ghcr.io/ublue-os/bazzite:stable
 
+# The RimFrost frame meter (a small Vulkan layer for test machines), compiled
+# against the same Fedora release as the base image.
+FROM registry.fedoraproject.org/fedora:44 AS framemeter
+COPY framemeter /src
+RUN dnf -y install gcc vulkan-headers &&     gcc -shared -fPIC -O2 -Wall -Wextra -Werror -fvisibility=hidden         -o /src/librimfrost_framemeter.so /src/framemeter.c -lpthread
+
 # Allow build scripts to be referenced without being copied into the final image
 FROM scratch AS ctx
 COPY build_files /
 COPY system_files /system_files
 # ClipFrost sources (proprietary), checked out by the workflow; may be empty
 COPY clipfrost-src /clipfrost-src
+COPY --from=framemeter /src/librimfrost_framemeter.so /src/rimfrost_framemeter.json /framemeter/
 
 # Base Image
 FROM ${BASE_IMAGE}

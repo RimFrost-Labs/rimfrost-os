@@ -1,0 +1,429 @@
+#!/usr/bin/python3
+"""rimfrost-telemetry: performance and error reports from RimFrost test machines.
+
+OFF unless the machine is enrolled; nothing is collected or sent otherwise.
+
+  sudo rimfrost-telemetry enroll --key KEY --tag NAME [--mode live|daily]
+  rimfrost-telemetry status
+  sudo rimfrost-telemetry disable
+  rimfrost-telemetry run            (the service; needs enrolment)
+
+Collected: hardware (CPU, GPU, driver, RAM, kernel, image version), every
+few seconds CPU/GPU load, temperatures, clocks, power, RAM/VRAM, the game in
+focus with FPS and 1 % low (from the RimFrost frame meter Vulkan layer), and errors: failing
+services, crashes (coredumps), GPU driver faults, and warnings from RimFrost's
+own services. A random device id identifies the machine; no user names, files
+or IP addresses are sent.
+"""
+import argparse
+import glob
+import json
+import os
+import re
+import secrets
+import select
+import shutil
+import subprocess
+import sys
+import threading
+import time
+import urllib.request
+
+CONF = "/etc/rimfrost/telemetry.conf"
+STATE_DIR = "/var/lib/rimfrost-telemetry"
+DEVICE_FILE = os.path.join(STATE_DIR, "device-id")
+FRAMES_DIR = "/var/tmp/rimfrost-frames"      # written by the RimFrost frame meter Vulkan layer
+FRAMES_ENV = "/etc/environment.d/90-rimfrost-telemetry.conf"
+UNIT = "rimfrost-telemetry.service"
+DEFAULT_ENDPOINT = "https://telemetry.rimfrost.online/v1/ingest"
+OUR_UNITS = ("rimfrost-gamemoded", "clipfrostd", "rimfrost-telemetry")
+COREDUMP_ID = "fc2e22bc6ee647b6b90729ab34a250b1"
+GPU_FAULT = re.compile(r"NVRM: Xid|amdgpu.*(ring .* timeout|GPU reset|page fault)|i915.*GPU HANG|GPU has fallen off", re.I)
+
+
+def sh(cmd, timeout=5):
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=timeout).stdout.strip()
+    except (OSError, subprocess.SubprocessError):
+        return ""
+
+
+def read(path, default=""):
+    try:
+        with open(path) as f:
+            return f.read().strip()
+    except OSError:
+        return default
+
+
+def load_conf():
+    try:
+        with open(CONF) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def device_id():
+    os.makedirs(STATE_DIR, exist_ok=True)
+    did = read(DEVICE_FILE)
+    if not re.fullmatch(r"[a-z0-9-]{8,64}", did or ""):
+        did = "rf-" + secrets.token_hex(12)
+        with open(DEVICE_FILE, "w") as f:
+            f.write(did)
+    return did
+
+
+# --- hardware --------------------------------------------------------------------
+
+def hardware():
+    cpu = next((l.split(":", 1)[1].strip() for l in read("/proc/cpuinfo").splitlines()
+                if l.startswith("model name")), "")
+    mem_kb = int(re.search(r"MemTotal:\s+(\d+)", read("/proc/meminfo") or "MemTotal: 0").group(1))
+    gpu, driver = "", ""
+    if shutil.which("nvidia-smi"):
+        out = sh(["nvidia-smi", "--query-gpu=name,driver_version", "--format=csv,noheader"])
+        if out:
+            gpu, driver = [x.strip() for x in out.splitlines()[0].split(",", 1)]
+            driver = "nvidia " + driver
+    if not gpu:
+        for line in sh(["lspci", "-mm"]).splitlines():
+            if re.search(r'"(VGA|3D|Display)', line):
+                parts = re.findall(r'"([^"]*)"', line)
+                gpu = " ".join(parts[1:3]) if len(parts) >= 3 else line
+                break
+        mesa = sh(["rpm", "-q", "--qf", "%{VERSION}\n", "mesa-dri-drivers"]).splitlines()
+        driver = f"mesa {mesa[0]}" if mesa and "not installed" not in mesa[0] else driver
+    osr = {k: v.strip("'\"") for k, v in re.findall(r"^(\w+)=(.*)$", read("/usr/lib/os-release"), re.M)}
+    return {"cpu": cpu, "gpu": gpu, "driver": driver, "ram_gb": round(mem_kb / 1048576),
+            "kernel": os.uname().release, "image": f"{osr.get('RIMFROST_IMAGE', '?')} {osr.get('OSTREE_VERSION', '')}".strip(),
+            "cores": os.cpu_count()}
+
+
+# --- samples ---------------------------------------------------------------------
+
+class Sampler:
+    def __init__(self):
+        self.last_cpu = self.cpu_times()
+        self.frame_pos = {}
+
+    @staticmethod
+    def cpu_times():
+        f = [int(x) for x in read("/proc/stat").splitlines()[0].split()[1:]]
+        idle = f[3] + f[4]
+        return sum(f), idle
+
+    def cpu_pct(self):
+        tot, idle = self.cpu_times()
+        dt, di = tot - self.last_cpu[0], idle - self.last_cpu[1]
+        self.last_cpu = (tot, idle)
+        return round(100 * (1 - di / dt), 1) if dt > 0 else None
+
+    @staticmethod
+    def ram_pct():
+        m = dict(re.findall(r"(\w+):\s+(\d+)", read("/proc/meminfo")))
+        tot, avail = int(m.get("MemTotal", 0)), int(m.get("MemAvailable", 0))
+        return round(100 * (1 - avail / tot), 1) if tot else None
+
+    @staticmethod
+    def cpu_temp():
+        best = None
+        for hw in glob.glob("/sys/class/hwmon/hwmon*"):
+            name = read(hw + "/name")
+            if name in ("k10temp", "coretemp", "zenpower", "cpu_thermal"):
+                for lab in sorted(glob.glob(hw + "/temp*_label")) or [hw + "/temp1_label"]:
+                    label = read(lab)
+                    if label in ("Tctl", "Tdie", "Package id 0", "") or name == "cpu_thermal":
+                        v = read(lab.replace("_label", "_input"))
+                        if v:
+                            return round(int(v) / 1000, 1)
+        return best
+
+    @staticmethod
+    def gpu():
+        if shutil.which("nvidia-smi"):
+            out = sh(["nvidia-smi", "--query-gpu=utilization.gpu,temperature.gpu,clocks.gr,power.draw,"
+                      "memory.used,memory.total", "--format=csv,noheader,nounits"])
+            if out:
+                v = [x.strip() for x in out.splitlines()[0].split(",")]
+                f = lambda x: float(x) if re.fullmatch(r"[\d.]+", x) else None
+                used, total = f(v[4]), f(v[5])
+                return {"gpu": f(v[0]), "gpu_temp": f(v[1]), "gpu_clock": f(v[2]), "power_w": f(v[3]),
+                        "vram": round(100 * used / total, 1) if used is not None and total else None}
+        for dev in glob.glob("/sys/class/drm/card*/device"):
+            busy = read(dev + "/gpu_busy_percent")
+            if busy:
+                hw = (glob.glob(dev + "/hwmon/hwmon*") or [""])[0]
+                t, p = read(hw + "/temp1_input"), read(hw + "/power1_average") or read(hw + "/power1_input")
+                u, tot = read(dev + "/mem_info_vram_used"), read(dev + "/mem_info_vram_total")
+                return {"gpu": float(busy), "gpu_temp": int(t) / 1000 if t else None,
+                        "power_w": round(int(p) / 1e6, 1) if p else None,
+                        "vram": round(100 * int(u) / int(tot), 1) if u and tot else None, "gpu_clock": None}
+        return {}
+
+    @staticmethod
+    def game():
+        for f in glob.glob("/run/user/*/rimfrost-gamemode.json"):
+            try:
+                with open(f) as fh:
+                    st = json.load(fh)
+            except (OSError, ValueError):
+                continue
+            games = st.get("games") or {}
+            if games:
+                gid = st.get("focused") if st.get("focused") in games else sorted(games)[0]
+                return games[gid].get("caption") or gid, st.get("focused") in games
+        return None, False
+
+    def frames(self):
+        """FPS, 1 % low and frame time from the frame meter's per-second lines
+        written since the last sample, for the game that drew most recently."""
+        best = None
+        for path in glob.glob(os.path.join(FRAMES_DIR, "*.log")):
+            try:
+                if time.time() - os.path.getmtime(path) > 30:
+                    continue
+                pos = self.frame_pos.get(path, 0)
+                with open(path, errors="replace") as f:
+                    f.seek(pos)
+                    lines = f.read().splitlines()
+                    self.frame_pos[path] = f.tell()
+            except OSError:
+                continue
+            rows = []
+            for line in lines:
+                parts = line.split()
+                try:
+                    rows.append((int(parts[0]), float(parts[1]), float(parts[2]), float(parts[3])))
+                except (ValueError, IndexError):
+                    pass
+            if rows and (best is None or rows[-1][0] > best[-1][0]):
+                best = rows
+        if not best:
+            return None, None, None
+        fps = sum(r[1] for r in best) / len(best)
+        low = min(r[3] for r in best)
+        ft = sum(r[2] for r in best) / len(best)
+        return round(fps, 1), round(low, 1), round(ft, 2)
+
+    def cleanup(self):
+        for path in glob.glob(os.path.join(FRAMES_DIR, "*.log")):
+            try:
+                if time.time() - os.path.getmtime(path) > 86400:
+                    os.unlink(path)
+                    self.frame_pos.pop(path, None)
+            except OSError:
+                pass
+
+    def sample(self):
+        game, focused = self.game()
+        fps, low1, ft = self.frames()
+        s = {"ts": int(time.time() * 1000), "cpu": self.cpu_pct(), "ram": self.ram_pct(),
+             "cpu_temp": self.cpu_temp(), "game": game, "focused_game": focused,
+             "fps": fps, "fps_low1": low1, "frametime_ms": ft}
+        s.update(self.gpu())
+        return s
+
+
+# --- events ----------------------------------------------------------------------
+
+class Events(threading.Thread):
+    """Follows the journal and keeps the lines worth reporting."""
+
+    def __init__(self):
+        super().__init__(daemon=True)
+        self.lock = threading.Lock()
+        self.buf = []
+        self.seen = {}
+
+    def run(self):
+        proc = subprocess.Popen(["journalctl", "-f", "-n", "0", "-o", "json", "-p", "info"],
+                                stdout=subprocess.PIPE, text=True)
+        for line in proc.stdout:
+            try:
+                e = json.loads(line)
+            except ValueError:
+                continue
+            ev = self.pick(e)
+            if ev:
+                key = (ev["source"], ev["message"][:120])
+                now = time.time()
+                if now - self.seen.get(key, 0) < 60:       # same message at most once a minute
+                    continue
+                self.seen[key] = now
+                with self.lock:
+                    if len(self.buf) < 500:
+                        self.buf.append(ev)
+
+    @staticmethod
+    def pick(e):
+        msg = e.get("MESSAGE")
+        if isinstance(msg, list):
+            msg = bytes(msg).decode(errors="replace")
+        msg = str(msg or "")
+        prio = int(e.get("PRIORITY", 6))
+        unit = (e.get("_SYSTEMD_USER_UNIT") or e.get("_SYSTEMD_UNIT") or "").replace(".service", "")
+        ident = e.get("SYSLOG_IDENTIFIER") or unit or "?"
+        ts = int(int(e.get("__REALTIME_TIMESTAMP", time.time() * 1e6)) / 1000)
+        if e.get("MESSAGE_ID") == COREDUMP_ID:
+            return {"ts": ts, "level": "error", "source": "crash",
+                    "message": f"{e.get('COREDUMP_COMM', '?')} crashed (signal {e.get('COREDUMP_SIGNAL', '?')})"}
+        if ident == "kernel" and GPU_FAULT.search(msg):
+            return {"ts": ts, "level": "error", "source": "gpu-driver", "message": msg}
+        if any(unit.startswith(u) for u in OUR_UNITS):
+            level = "error" if prio <= 3 else "warning" if prio == 4 else "info"
+            return {"ts": ts, "level": level, "source": unit, "message": msg}
+        if prio <= 3 and ident not in ("kernel",):
+            return {"ts": ts, "level": "error", "source": ident, "message": msg}
+        if "Failed with result" in msg or "failed with result" in msg:
+            return {"ts": ts, "level": "error", "source": "systemd", "message": f"{unit or ident}: {msg}"}
+        return None
+
+    def take(self):
+        with self.lock:
+            out, self.buf = self.buf, []
+        return out
+
+
+# --- sending ---------------------------------------------------------------------
+
+def post(conf, payload):
+    data = json.dumps(payload).encode()
+    req = urllib.request.Request(conf.get("endpoint", DEFAULT_ENDPOINT), data=data, method="POST",
+                                 headers={"content-type": "application/json",
+                                          "authorization": "Bearer " + conf["key"],
+                                          "user-agent": "rimfrost-telemetry/1"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return r.status
+
+
+def aggregate(samples):
+    """One summary sample for daily mode: averages, plus worst 1 % low."""
+    if not samples:
+        return []
+    out = {"ts": samples[-1]["ts"], "game": next((s["game"] for s in reversed(samples) if s.get("game")), None)}
+    for k in ("cpu", "gpu", "ram", "vram", "cpu_temp", "gpu_temp", "gpu_clock", "power_w", "fps", "frametime_ms"):
+        vals = [s[k] for s in samples if s.get(k) is not None]
+        out[k] = round(sum(vals) / len(vals), 1) if vals else None
+    lows = [s["fps_low1"] for s in samples if s.get("fps_low1") is not None]
+    out["fps_low1"] = min(lows) if lows else None
+    return [out]
+
+
+def run():
+    conf = load_conf()
+    if not conf or not conf.get("key"):
+        print("Not enrolled; nothing to do.", file=sys.stderr)
+        return 0
+    live = conf.get("mode", "live") == "live"
+    interval = int(conf.get("interval", 5 if live else 86400))
+    did, hw = device_id(), hardware()
+    sampler, events = Sampler(), Events()
+    events.start()
+    queue_s, queue_e = [], []
+    first = True
+    next_send = time.time() + (interval if not live else 0)
+    tick = 5
+    last_cleanup = 0
+    while True:
+        if time.time() - last_cleanup > 3600:
+            sampler.cleanup()
+            last_cleanup = time.time()
+        queue_s.append(sampler.sample())
+        if time.time() >= next_send:
+            batch_s = queue_s if live else aggregate(queue_s)
+            batch_e = queue_e + events.take()
+            payload = {"device": did, "tag": conf.get("tag"), "image": hw["image"], "samples": batch_s[-500:],
+                       "events": batch_e[-200:]}
+            if first:
+                payload["hw"] = hw
+                payload["events"].insert(0, {"ts": int(time.time() * 1000), "level": "info", "source": "rimfrost-telemetry",
+                                             "message": f"started ({'live' if live else 'daily'}), {hw['gpu']}"})
+            try:
+                post(conf, payload)
+                queue_s, queue_e, first = [], [], False
+                next_send = time.time() + interval
+            except Exception as ex:  # keep the data and try again soon
+                queue_e = batch_e[-1000:]
+                queue_s = queue_s[-2000:]
+                print(f"send failed: {ex}", file=sys.stderr, flush=True)
+                next_send = time.time() + min(60, interval)
+        time.sleep(tick)
+
+
+# --- enrolment ---------------------------------------------------------------------
+
+def need_root():
+    if os.geteuid() != 0:
+        sys.exit("Run this with sudo.")
+
+
+def enroll(a):
+    need_root()
+    conf = {"key": a.key, "tag": a.tag, "mode": a.mode, "endpoint": a.endpoint}
+    os.makedirs(os.path.dirname(CONF), exist_ok=True)
+    with open(CONF, "w") as f:
+        json.dump(conf, f, indent=2)
+    os.chmod(CONF, 0o600)
+    device_id()
+    # FPS: the frame meter Vulkan layer is switched on for new sessions and
+    # writes one line a second per game into FRAMES_DIR.
+    os.makedirs(FRAMES_DIR, exist_ok=True)
+    os.chmod(FRAMES_DIR, 0o1777)
+    os.makedirs(os.path.dirname(FRAMES_ENV), exist_ok=True)
+    with open(FRAMES_ENV, "w") as f:
+        f.write("RIMFROST_FRAMEMETER=1\n")
+    subprocess.run(["systemctl", "enable", "--now", UNIT], check=False)
+    print(f"Enrolled as '{a.tag}' ({a.mode}). Device id {read(DEVICE_FILE)}.")
+    print("Log out and in once so games pick up the frame logging.")
+
+
+def disable(_a):
+    need_root()
+    subprocess.run(["systemctl", "disable", "--now", UNIT], check=False)
+    for p in (CONF, FRAMES_ENV):
+        try:
+            os.unlink(p)
+        except FileNotFoundError:
+            pass
+    shutil.rmtree(FRAMES_DIR, ignore_errors=True)
+    print("Telemetry is off and its settings are removed.")
+
+
+def status(_a):
+    conf = load_conf()
+    if not conf:
+        if os.path.exists(CONF):
+            print("Telemetry: enrolled, service", sh(["systemctl", "is-active", UNIT]), "(sudo for details)")
+        else:
+            print("Telemetry: off (not enrolled)")
+        return
+    active = sh(["systemctl", "is-active", UNIT])
+    print(f"Telemetry: {conf.get('mode', 'live')} as '{conf.get('tag')}', service {active}")
+    print("Device id:", read(DEVICE_FILE) or "-")
+    print("Sends to:", conf.get("endpoint", DEFAULT_ENDPOINT))
+
+
+def main():
+    p = argparse.ArgumentParser(prog="rimfrost-telemetry", description=__doc__.splitlines()[0])
+    sub = p.add_subparsers(dest="cmd")
+    e = sub.add_parser("enroll")
+    e.add_argument("--key", required=True)
+    e.add_argument("--tag", required=True)
+    e.add_argument("--mode", choices=["live", "daily"], default="live")
+    e.add_argument("--endpoint", default=DEFAULT_ENDPOINT)
+    sub.add_parser("status")
+    sub.add_parser("disable")
+    sub.add_parser("run")
+    a = p.parse_args()
+    if a.cmd == "enroll":
+        return enroll(a)
+    if a.cmd == "disable":
+        return disable(a)
+    if a.cmd == "run":
+        return run()
+    return status(a)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

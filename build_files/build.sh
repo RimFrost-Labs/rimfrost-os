@@ -11,6 +11,19 @@ WALLPAPER=/usr/share/wallpapers/RimFrost/contents/images/3840x2160.png
 
 # Our files: wallpaper, logo, signing key, container policy pieces
 cp -avf "/ctx/system_files"/. /
+# Set modes explicitly: programs 755, everything else 644, directories 755
+# (sources checked out on Windows would otherwise carry 777).
+( cd /ctx/system_files && find . -mindepth 1 ) | while read -r rel; do
+    path="/${rel#./}"
+    if [ -d "$path" ] && [ ! -L "$path" ]; then
+        chmod 755 "$path"
+    elif [ -f "$path" ] && [ ! -L "$path" ]; then
+        case "$path" in
+            /usr/bin/*|/usr/libexec/*) chmod 755 "$path" ;;
+            *) chmod 644 "$path" ;;
+        esac
+    fi
+done
 
 ### Identity ###################################################################
 # Keep ID=bazzite so Bazzite's own tools (ujust, the updater) keep working;
@@ -100,6 +113,13 @@ elif [ "${REQUIRE_CLIPFROST:-0}" = 1 ]; then
     exit 1
 fi
 
+### Test telemetry ###########################################################
+# Off unless a test machine is enrolled (sudo rimfrost-telemetry enroll ...).
+chmod 755 /usr/libexec/rimfrost-telemetry
+ln -sf /usr/libexec/rimfrost-telemetry /usr/bin/rimfrost-telemetry
+install -m755 /ctx/framemeter/librimfrost_framemeter.so /usr/lib64/librimfrost_framemeter.so
+install -m644 /ctx/framemeter/rimfrost_framemeter.json     /usr/share/vulkan/implicit_layer.d/rimfrost_framemeter.x86_64.json
+
 ### Package sources ##########################################################
 # Bazzite ships the terra repos disabled. bootc-image-builder still reads them
 # when making the ISO and fails on their file:// GPG keys, so keep them out of
@@ -148,3 +168,5 @@ command -v mangohud
 ! ls /etc/yum.repos.d/terra*.repo 2>/dev/null
 lsinitrd -f usr/lib/initrd-release "/usr/lib/modules/$KVER/initramfs.img" | grep -q '^DEFAULT_HOSTNAME="rimfrost"'
 getcap /usr/bin/gsr-kms-server | grep -q cap_sys_admin
+! systemctl is-enabled rimfrost-telemetry.service >/dev/null 2>&1
+test -x /usr/lib64/librimfrost_framemeter.so

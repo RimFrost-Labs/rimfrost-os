@@ -8,3 +8,4 @@ _build-*/**
 # ClipFrost (proprietary) is checked out here at build time, never committed
 /clipfrost-src/*
 !/clipfrost-src/.keep
+/framemeter/*.so

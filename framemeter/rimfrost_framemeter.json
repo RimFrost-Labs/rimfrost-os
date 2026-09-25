@@ -1,0 +1,21 @@
+{
+    "file_format_version": "1.0.0",
+    "layer": {
+        "name": "VK_LAYER_RIMFROST_framemeter",
+        "type": "GLOBAL",
+        "library_path": "/usr/lib64/librimfrost_framemeter.so",
+        "api_version": "1.3.0",
+        "implementation_version": "1",
+        "description": "RimFrost frame meter (test machines only)",
+        "functions": {
+            "vkGetInstanceProcAddr": "fm_GetInstanceProcAddr",
+            "vkGetDeviceProcAddr": "fm_GetDeviceProcAddr"
+        },
+        "enable_environment": {
+            "RIMFROST_FRAMEMETER": "1"
+        },
+        "disable_environment": {
+            "RIMFROST_FRAMEMETER_DISABLE": "1"
+        }
+    }
+}

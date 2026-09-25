@@ -1,0 +1,16 @@
+[Unit]
+Description=RimFrost test telemetry (only on enrolled test machines)
+ConditionPathExists=/etc/rimfrost/telemetry.conf
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/libexec/rimfrost-telemetry run
+Restart=on-failure
+RestartSec=10
+Nice=10
+CPUWeight=20
+IOWeight=20
+
+[Install]
+WantedBy=multi-user.target
