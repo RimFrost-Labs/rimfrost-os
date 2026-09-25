@@ -6,6 +6,8 @@ ARG BASE_IMAGE=ghcr.io/ublue-os/bazzite:stable
 FROM scratch AS ctx
 COPY build_files /
 COPY system_files /system_files
+# ClipFrost sources (proprietary), checked out by the workflow; may be empty
+COPY clipfrost-src /clipfrost-src
 
 # Base Image
 FROM ${BASE_IMAGE}

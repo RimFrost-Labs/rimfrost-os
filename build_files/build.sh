@@ -74,6 +74,29 @@ dnf5 -y --enablerepo=terra install gpu-screen-recorder
 # leave no package-manager state behind in /var and /run (bootc lint)
 rm -rf /var/lib/dnf/repos /run/dnf
 
+### ClipFrost ##################################################################
+# Instant replay (proprietary, RimFrost Labs). The workflow checks it out into
+# clipfrost-src; builds without access leave it out (REQUIRE_CLIPFROST=1 makes
+# that an error).
+CF=/ctx/clipfrost-src
+if [ -f "$CF/clipfrost/clipfrostd" ]; then
+    install -d /usr/lib/clipfrost/clipfrost /usr/share/licenses/clipfrost
+    install -m644 "$CF"/clipfrost/__init__.py "$CF"/clipfrost/engine.py /usr/lib/clipfrost/clipfrost/
+    install -m755 "$CF"/clipfrost/clipfrostd "$CF"/clipfrost/clipfrost /usr/lib/clipfrost/clipfrost/
+    install -m755 "$CF"/clipfrost/clipfrost-hook /usr/libexec/clipfrost-hook
+    ln -sf /usr/lib/clipfrost/clipfrost/clipfrostd /usr/libexec/clipfrostd
+    ln -sf /usr/lib/clipfrost/clipfrost/clipfrost /usr/bin/clipfrost
+    install -m644 "$CF"/data/clipfrostd.service /usr/lib/systemd/user/clipfrostd.service
+    install -m644 "$CF"/data/clipfrost-save.desktop /usr/share/applications/clipfrost-save.desktop
+    printf 'ClipFrost (c) RimFrost Labs. All rights reserved. Not covered by the
+Apache 2.0 licence of RimFrost OS.
+' > /usr/share/licenses/clipfrost/LICENSE
+    systemctl --global enable clipfrostd.service
+elif [ "${REQUIRE_CLIPFROST:-0}" = 1 ]; then
+    echo "ClipFrost sources missing" >&2
+    exit 1
+fi
+
 ### Package sources ##########################################################
 # Bazzite ships the terra repos disabled. bootc-image-builder still reads them
 # when making the ISO and fails on their file:// GPG keys, so keep them out of

@@ -4,3 +4,7 @@ output
 _build-*/**
 *_chunkah_*
 *_rpm-ostree_*
+
+# ClipFrost (proprietary) is checked out here at build time, never committed
+/clipfrost-src/*
+!/clipfrost-src/.keep

@@ -45,6 +45,20 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      # ClipFrost is proprietary and lives in a private repo; a read-only
+      # deploy key lets the build include it. Without the key the image is
+      # built without ClipFrost.
+      - name: Check out ClipFrost
+        if: env.HAS_CLIPFROST == 'true'
+        env:
+          HAS_CLIPFROST: ${{ secrets.CLIPFROST_DEPLOY_KEY != '' }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: RimFrost-Labs/clipfrost
+          ssh-key: ${{ secrets.CLIPFROST_DEPLOY_KEY }}
+          path: clipfrost-src
+          persist-credentials: false
+
       - name: Maximize build space
         uses: ublue-os/remove-unwanted-software@695eb75bc387dbcd9685a8e72d23439d8686cba6
 
