@@ -82,7 +82,10 @@ CF=/ctx/clipfrost-src
 if [ -f "$CF/clipfrost/clipfrostd" ]; then
     install -d /usr/lib/clipfrost/clipfrost /usr/share/licenses/clipfrost
     install -m644 "$CF"/clipfrost/__init__.py "$CF"/clipfrost/engine.py /usr/lib/clipfrost/clipfrost/
-    install -m755 "$CF"/clipfrost/clipfrostd "$CF"/clipfrost/clipfrost /usr/lib/clipfrost/clipfrost/
+    install -m755 "$CF"/clipfrost/clipfrostd "$CF"/clipfrost/clipfrost "$CF"/clipfrost/clipfrost-settings         /usr/lib/clipfrost/clipfrost/
+    install -m644 "$CF"/clipfrost/settings.qml /usr/lib/clipfrost/clipfrost/
+    ln -sf /usr/lib/clipfrost/clipfrost/clipfrost-settings /usr/bin/clipfrost-settings
+    install -m644 "$CF"/data/clipfrost.desktop /usr/share/applications/clipfrost.desktop
     install -m755 "$CF"/clipfrost/clipfrost-hook /usr/libexec/clipfrost-hook
     ln -sf /usr/lib/clipfrost/clipfrost/clipfrostd /usr/libexec/clipfrostd
     ln -sf /usr/lib/clipfrost/clipfrost/clipfrost /usr/bin/clipfrost
