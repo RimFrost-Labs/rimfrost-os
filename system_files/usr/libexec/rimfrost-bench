@@ -1,0 +1,77 @@
+#!/usr/bin/python3
+"""rimfrost-bench: a stand-in "game" for testing game mode.
+
+Opens a window and renders frames. Every frame does the same fixed amount
+of CPU work (so when other programs steal the CPU, frames get longer, like
+in a real CPU-bound game). After the run it prints average FPS and the 1 %
+and 0.1 % lows, and writes the frame times as JSON.
+
+  RIMFROST_GAME=bench /usr/libexec/rimfrost-bench [seconds] [work] [out.json]
+
+RIMFROST_GAME makes game mode treat it as a game.
+"""
+import json
+import statistics
+import sys
+import time
+
+import gi
+gi.require_version("Gtk", "4.0")
+from gi.repository import GLib, Gtk  # noqa: E402
+
+SECONDS = float(sys.argv[1]) if len(sys.argv) > 1 else 20
+WORK = int(sys.argv[2]) if len(sys.argv) > 2 else 60000
+OUT = sys.argv[3] if len(sys.argv) > 3 else "/tmp/rimfrost-bench.json"
+
+
+def work(n):
+    x = 0
+    for i in range(n):
+        x = (x * 1103515245 + i) & 0xFFFFFFFF
+    return x
+
+
+class Bench(Gtk.Application):
+    def __init__(self):
+        super().__init__(application_id="org.rimfrost.Bench")
+        self.times = []
+
+    def do_activate(self):
+        self.win = Gtk.ApplicationWindow(application=self, title="RimFrost bench")
+        self.win.set_default_size(640, 360)
+        self.label = Gtk.Label(label="starting")
+        self.win.set_child(self.label)
+        self.win.present()
+        self.start = self.last = time.perf_counter()
+        self.label.add_tick_callback(self.tick)
+
+    def tick(self, widget, clock):
+        now = time.perf_counter()
+        self.times.append(now - self.last)
+        self.last = now
+        work(WORK)
+        if len(self.times) % 30 == 0:
+            fps = 30 / max(sum(self.times[-30:]), 1e-9)
+            self.label.set_label(f"{fps:5.1f} fps")
+        if now - self.start > SECONDS:
+            self.finish()
+            return GLib.SOURCE_REMOVE
+        return GLib.SOURCE_CONTINUE
+
+    def finish(self):
+        ft = sorted(self.times[5:])                      # skip warm-up frames
+        n = len(ft)
+        avg = n / sum(ft)
+        low1 = 1 / statistics.mean(ft[-max(1, n // 100):])
+        low01 = 1 / statistics.mean(ft[-max(1, n // 1000):])
+        res = {"frames": n, "avg_fps": round(avg, 1), "low1_fps": round(low1, 1),
+               "low01_fps": round(low01, 1), "max_ms": round(ft[-1] * 1000, 1),
+               "frame_ms": [round(t * 1000, 2) for t in self.times]}
+        with open(OUT, "w") as f:
+            json.dump(res, f)
+        print(json.dumps({k: v for k, v in res.items() if k != "frame_ms"}), flush=True)
+        self.quit()
+
+
+if __name__ == "__main__":
+    Bench().run([])

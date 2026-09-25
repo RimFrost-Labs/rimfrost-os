@@ -1,0 +1,17 @@
+{
+    "KPackageStructure": "KWin/Script",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "RimFrost Labs"
+            }
+        ],
+        "Description": "Reports the focused window to RimFrost game mode",
+        "EnabledByDefault": true,
+        "Id": "rimfrost-focus",
+        "License": "Apache-2.0",
+        "Name": "RimFrost game mode focus"
+    },
+    "X-Plasma-API": "javascript",
+    "X-Plasma-MainScript": "code/main.js"
+}

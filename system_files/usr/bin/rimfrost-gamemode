@@ -1,0 +1,83 @@
+#!/usr/bin/python3
+"""rimfrost-gamemode: see and steer RimFrost game mode.
+
+  rimfrost-gamemode status          what has focus, which games are known
+  rimfrost-gamemode on | off        turn game mode on or off
+  rimfrost-gamemode add CLASS       always treat this window class as a game
+  rimfrost-gamemode never CLASS     never treat this window class as a game
+"""
+import json
+import os
+import sys
+
+CONFIG = os.path.expanduser("~/.config/rimfrost/gamemode.json")
+STATE = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "rimfrost-gamemode.json")
+
+
+def load():
+    cfg = {"enabled": True, "games": [], "never": []}
+    try:
+        with open(CONFIG) as f:
+            cfg.update(json.load(f))
+    except (OSError, ValueError):
+        pass
+    return cfg
+
+
+def save(cfg):
+    os.makedirs(os.path.dirname(CONFIG), exist_ok=True)
+    with open(CONFIG, "w") as f:
+        json.dump(cfg, f, indent=2)
+
+
+def status():
+    cfg = load()
+    print("Game mode:", "on" if cfg["enabled"] else "off")
+    try:
+        with open(STATE) as f:
+            st = json.load(f)
+    except (OSError, ValueError):
+        print("The game mode service is not running (systemctl --user status rimfrost-gamemoded).")
+        return 1
+    last = st.get("last_focus") or {}
+    print("Focused window:", last.get("class") or "-", f"(pid {last.get('pid')})" if last else "")
+    print("Focused game:", st.get("focused") or "none")
+    print("Power profile held at performance:", "yes" if st.get("power_hold") else "no")
+    games = st.get("games") or {}
+    if not games:
+        print("Running games: none")
+    for gid, g in games.items():
+        print(f"  {g.get('caption') or gid}  [{g['unit']}]  weight {g.get('weight')}")
+    if cfg["games"]:
+        print("Always games:", ", ".join(cfg["games"]))
+    if cfg["never"]:
+        print("Never games:", ", ".join(cfg["never"]))
+    return 0
+
+
+def main(argv):
+    if len(argv) < 2 or argv[1] in ("-h", "--help", "help"):
+        print(__doc__.strip())
+        return 0
+    cmd = argv[1]
+    if cmd == "status":
+        return status()
+    cfg = load()
+    if cmd in ("on", "off"):
+        cfg["enabled"] = cmd == "on"
+    elif cmd in ("add", "never") and len(argv) == 3:
+        key = "games" if cmd == "add" else "never"
+        other = "never" if cmd == "add" else "games"
+        if argv[2] not in cfg[key]:
+            cfg[key].append(argv[2])
+        cfg[other] = [c for c in cfg[other] if c != argv[2]]
+    else:
+        print(__doc__.strip(), file=sys.stderr)
+        return 2
+    save(cfg)
+    print("Saved. It applies from the next focus change.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

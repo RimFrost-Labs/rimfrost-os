@@ -1,0 +1,304 @@
+#!/usr/bin/python3
+# RimFrost game mode.
+#
+# KWin tells us which window has focus (the rimfrost-focus KWin script calls
+# FocusChanged on org.rimfrost.GameMode). When that window belongs to a game,
+# the game's processes are moved into their own systemd scope and get a large
+# CPU and IO weight, and the power profile is held at "performance". When
+# focus goes elsewhere the game drops below normal weight, so the desktop is
+# smooth; when it comes back the game gets the machine again.
+#
+# Weights only matter when programs compete for the CPU or disk, so nothing
+# is slowed down on an idle machine. No real-time scheduling and no stopping
+# of processes: online games never lose their connection.
+
+import json
+import logging
+import os
+import sys
+import time
+
+import dbus
+import dbus.service
+from dbus.mainloop.glib import DBusGMainLoop
+from gi.repository import GLib
+
+BUS_NAME = "org.rimfrost.GameMode"
+OBJ_PATH = "/org/rimfrost/GameMode"
+
+WEIGHT_FOCUSED = 1000     # default for everything else is 100
+WEIGHT_BACKGROUND = 50
+CONFIG = os.path.expanduser("~/.config/rimfrost/gamemode.json")
+STATE = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "rimfrost-gamemode.json")
+
+# Environment variables that launchers set for the processes of a game.
+GAME_ENV = ("SteamGameId", "SteamAppId", "STEAM_COMPAT_APP_ID",
+            "LUTRIS_GAME_UUID", "HEROIC_APP_NAME", "RIMFROST_GAME")
+# Processes that are part of a launcher, never the game itself.
+NOT_GAMES = {"steam", "steamwebhelper", "lutris", "heroic", "bottles", "plasmashell", "kwin_wayland"}
+
+log = logging.getLogger("rimfrost-gamemode")
+
+
+def read_config():
+    cfg = {"enabled": True, "games": [], "never": []}
+    try:
+        with open(CONFIG) as f:
+            cfg.update(json.load(f))
+    except (OSError, ValueError):
+        pass
+    return cfg
+
+
+def proc_environ(pid):
+    try:
+        with open(f"/proc/{pid}/environ", "rb") as f:
+            raw = f.read()
+    except OSError:
+        return {}
+    env = {}
+    for item in raw.split(b"\0"):
+        k, _, v = item.partition(b"=")
+        if k:
+            env[k.decode(errors="replace")] = v.decode(errors="replace")
+    return env
+
+
+def proc_name(pid):
+    try:
+        with open(f"/proc/{pid}/comm") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
+
+def proc_cmdline(pid):
+    try:
+        with open(f"/proc/{pid}/cmdline", "rb") as f:
+            return f.read().replace(b"\0", b" ").decode(errors="replace")
+    except OSError:
+        return ""
+
+
+def parent(pid):
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            return int(f.read().rsplit(")", 1)[1].split()[1])
+    except (OSError, IndexError, ValueError):
+        return 0
+
+
+def children_map():
+    kids = {}
+    for d in os.listdir("/proc"):
+        if d.isdigit():
+            kids.setdefault(parent(int(d)), []).append(int(d))
+    return kids
+
+
+def game_id(pid, resource_class, cfg):
+    """A short id for the game this window belongs to, or None."""
+    rc = (resource_class or "").lower()
+    if rc in (c.lower() for c in cfg.get("never", [])):
+        return None
+    if rc in (c.lower() for c in cfg.get("games", [])):
+        return rc
+    if proc_name(pid) in NOT_GAMES:
+        return None
+    env = proc_environ(pid)
+    for key in GAME_ENV:
+        if env.get(key) and env.get(key) != "0":
+            return f"{key}-{env[key]}"
+    cmd = proc_cmdline(pid).lower()
+    if ".exe" in cmd and ("wine" in cmd or "proton" in cmd or env.get("WINEPREFIX")):
+        return "wine-" + os.path.basename(cmd.split(".exe")[0]).replace(" ", "_")[:40]
+    return None
+
+
+def game_root(pid, gid):
+    """Walk up while the parent still belongs to the same game."""
+    root = pid
+    while True:
+        p = parent(root)
+        if p <= 1 or proc_name(p) in NOT_GAMES:
+            return root
+        env = proc_environ(p)
+        if not any(env.get(k) for k in GAME_ENV) and "wine" not in proc_cmdline(p).lower():
+            return root
+        root = p
+
+
+def descendants(root):
+    kids = children_map()
+    out, todo = [], [root]
+    while todo:
+        p = todo.pop()
+        out.append(p)
+        todo.extend(kids.get(p, []))
+    return out
+
+
+class GameMode(dbus.service.Object):
+    def __init__(self, bus, session):
+        super().__init__(bus, OBJ_PATH)
+        self.session = session
+        sysbus = dbus.SystemBus()
+        self.systemd = dbus.Interface(
+            session.get_object("org.freedesktop.systemd1", "/org/freedesktop/systemd1"),
+            "org.freedesktop.systemd1.Manager")
+        try:
+            self.power = dbus.Interface(
+                sysbus.get_object("org.freedesktop.UPower.PowerProfiles",
+                                  "/org/freedesktop/UPower/PowerProfiles"),
+                "org.freedesktop.UPower.PowerProfiles")
+        except dbus.DBusException:
+            self.power = None
+        self.games = {}           # gid -> {"unit", "root", "focused", "since"}
+        self.focused_gid = None
+        self.hold = None
+        self.hold_pending = False
+        self.last = {}
+        GLib.timeout_add_seconds(3, self.reap)
+        self.write_state()
+
+    # --- D-Bus API ------------------------------------------------------------
+
+    @dbus.service.method(BUS_NAME, in_signature="issb", out_signature="")
+    def FocusChanged(self, pid, resource_class, caption, fullscreen):
+        t0 = time.monotonic()
+        cfg = read_config()
+        self.last = {"pid": int(pid), "class": str(resource_class), "caption": str(caption)}
+        gid = game_id(int(pid), str(resource_class), cfg) if cfg.get("enabled", True) and pid > 0 else None
+        if gid and gid not in self.games:
+            self.adopt(gid, int(pid), str(caption))
+        if gid != self.focused_gid:
+            if self.focused_gid in self.games and self.unit_alive(self.focused_gid):
+                self.weigh(self.focused_gid, WEIGHT_BACKGROUND)
+            if gid in self.games:
+                self.weigh(gid, WEIGHT_FOCUSED)
+            self.focused_gid = gid
+            self.update_power()
+            log.info("focus %s (%s) -> %s in %.0f ms", resource_class, pid, gid or "desktop",
+                     (time.monotonic() - t0) * 1000)
+        self.write_state()
+
+    @dbus.service.method(BUS_NAME, in_signature="", out_signature="s")
+    def Status(self):
+        return json.dumps(self.state())
+
+    # --- work -----------------------------------------------------------------
+
+    def adopt(self, gid, pid, caption):
+        root = game_root(pid, gid)
+        pids = descendants(root)
+        unit = "rimfrost-game-" + "".join(c if c.isalnum() else "_" for c in gid)[:60] + ".scope"
+        props = [
+            ("PIDs", dbus.Array([dbus.UInt32(p) for p in pids], signature="u")),
+            ("Description", dbus.String(f"RimFrost game: {caption}"[:120])),
+            ("Slice", dbus.String("app.slice")),
+            ("CPUWeight", dbus.UInt64(WEIGHT_FOCUSED)),
+            ("IOWeight", dbus.UInt64(WEIGHT_FOCUSED)),
+        ]
+        try:
+            self.systemd.StartTransientUnit(unit, "replace", dbus.Array(props, signature="(sv)"),
+                                            dbus.Array([], signature="(sa(sv))"))
+        except dbus.DBusException as e:
+            log.warning("could not move %s into %s: %s", gid, unit, e)
+            return
+        self.games[gid] = {"unit": unit, "root": root, "caption": caption, "since": time.time(),
+                           "weight": WEIGHT_FOCUSED}
+        log.info("game %s: %d processes from pid %d into %s", gid, len(pids), root, unit)
+
+    def weigh(self, gid, weight):
+        g = self.games[gid]
+        try:
+            self.systemd.SetUnitProperties(g["unit"], True, dbus.Array([
+                ("CPUWeight", dbus.UInt64(weight)),
+                ("IOWeight", dbus.UInt64(weight))], signature="(sv)"))
+            g["weight"] = weight
+        except dbus.DBusException as e:
+            log.warning("weight %s on %s: %s", weight, g["unit"], e)
+
+    def update_power(self):
+        # Asynchronous: switching the profile can take a few hundred ms and
+        # must not delay the focus change itself.
+        if self.power is None:
+            return
+        want = self.focused_gid in self.games
+        if want and self.hold is None and not self.hold_pending:
+            self.hold_pending = True
+            self.power.HoldProfile("performance", "A game has focus", "org.rimfrost.GameMode",
+                                   reply_handler=self.held, error_handler=self.power_error)
+        elif not want and self.hold is not None:
+            cookie, self.hold = self.hold, None
+            self.power.ReleaseProfile(dbus.UInt32(cookie), reply_handler=lambda: None,
+                                      error_handler=self.power_error)
+
+    def held(self, cookie):
+        self.hold_pending = False
+        self.hold = int(cookie)
+        if self.focused_gid not in self.games:      # focus left while we waited
+            self.update_power()
+        self.write_state()
+
+    def power_error(self, e):
+        self.hold_pending = False
+        log.warning("power profile: %s", e)
+
+    def reap(self):
+        for gid, g in list(self.games.items()):
+            try:
+                self.systemd.GetUnit(g["unit"])
+                alive = os.path.exists(f"/proc/{g['root']}") or bool(self.unit_pids(g["unit"]))
+            except dbus.DBusException:
+                alive = False
+            if not alive:
+                log.info("game %s ended", gid)
+                del self.games[gid]
+                if self.focused_gid == gid:
+                    self.focused_gid = None
+                    self.update_power()
+        self.write_state()
+        return True
+
+    def unit_alive(self, gid):
+        try:
+            self.systemd.GetUnit(self.games[gid]["unit"])
+            return True
+        except dbus.DBusException:
+            return False
+
+    def unit_pids(self, unit):
+        try:
+            path = self.systemd.GetUnit(unit)
+            obj = self.session.get_object("org.freedesktop.systemd1", path)
+            procs = obj.GetProcesses(dbus_interface="org.freedesktop.systemd1.Scope")
+            return [int(p[1]) for p in procs]
+        except dbus.DBusException:
+            return []
+
+    def state(self):
+        return {"focused": self.focused_gid, "power_hold": self.hold is not None,
+                "last_focus": self.last, "games": self.games}
+
+    def write_state(self):
+        try:
+            with open(STATE + ".tmp", "w") as f:
+                json.dump(self.state(), f, indent=1)
+            os.replace(STATE + ".tmp", STATE)
+        except OSError:
+            pass
+
+
+def main():
+    logging.basicConfig(level=logging.INFO, format="%(message)s", stream=sys.stdout)
+    DBusGMainLoop(set_as_default=True)
+    session = dbus.SessionBus()
+    name = dbus.service.BusName(BUS_NAME, session, do_not_queue=True)  # noqa: F841 (keeps the name)
+    GameMode(session, session)
+    log.info("RimFrost game mode ready")
+    GLib.MainLoop().run()
+
+
+if __name__ == "__main__":
+    main()

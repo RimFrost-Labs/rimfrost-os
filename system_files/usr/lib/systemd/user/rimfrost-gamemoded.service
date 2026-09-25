@@ -1,0 +1,17 @@
+[Unit]
+Description=RimFrost game mode (gives the focused game the machine)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=dbus
+BusName=org.rimfrost.GameMode
+ExecStart=/usr/libexec/rimfrost-gamemoded
+Restart=on-failure
+RestartSec=2
+# Keep the daemon itself out of the way of games.
+Slice=background.slice
+CPUWeight=20
+
+[Install]
+WantedBy=graphical-session.target

@@ -75,7 +75,7 @@ Rectangle {
             font.family: "Lato"
             font.weight: Font.Bold
             font.pixelSize: Math.round(root.markSize * 0.46)
-            font.letterSpacing: font.pixelSize * 0.04
+            font.letterSpacing: Math.round(root.markSize * 0.46) * 0.04
         }
     }
 

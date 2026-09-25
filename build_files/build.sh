@@ -66,6 +66,16 @@ for size in 64 256; do
         "/usr/share/icons/hicolor/${size}x${size}/apps/rimfrost-logo.png"
 done
 
+### Game mode ##################################################################
+# rimfrost-gamemoded gives the focused game the CPU and disk (cgroup weights)
+# and holds the performance power profile; a KWin script reports focus.
+chmod 755 /usr/libexec/rimfrost-gamemoded /usr/libexec/rimfrost-bench /usr/bin/rimfrost-gamemode
+systemctl --global enable rimfrost-gamemoded.service
+mkdir -p /etc/xdg
+printf '[Plugins]\nrimfrost-focusEnabled=true\n' >> /etc/xdg/kwinrc
+# MangoHud (FPS overlay, frame-time logs for measuring game mode) comes with
+# Bazzite as terra-mangohud.
+
 ### Checks #####################################################################
 grep -q 'RimFrost OS' /usr/lib/os-release
 grep -q 'set-hostname rimfrost' /usr/libexec/bazzite-hardware-setup
@@ -74,3 +84,8 @@ jq -e --arg repo "ghcr.io/${IMAGE_VENDOR}" '.transports.docker[$repo]' /etc/cont
 test -f "$WALLPAPER"
 grep -q 'Theme=org.rimfrost.splash' /etc/xdg/ksplashrc
 grep -q 'Theme=org.rimfrost.splash' /usr/share/plasma/look-and-feel/com.valve.vapor.desktop/contents/defaults
+python3 -c 'import ast, sys; [ast.parse(open(f).read(), f) for f in sys.argv[1:]]' \
+    /usr/libexec/rimfrost-gamemoded /usr/bin/rimfrost-gamemode /usr/libexec/rimfrost-bench
+test -f /usr/share/kwin/scripts/rimfrost-focus/contents/code/main.js
+systemctl --global is-enabled rimfrost-gamemoded.service
+command -v mangohud
