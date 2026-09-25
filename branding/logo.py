@@ -92,6 +92,12 @@ if __name__ == '__main__':
     os.makedirs(SPLASH, exist_ok=True)
     open(os.path.join(SPLASH, 'rimfrost-mark.svg'), 'w').write(svg())
     glow().save(os.path.join(SPLASH, 'glow.png'))
+    # icons for the system (os-release LOGO=rimfrost-logo), transparent background
+    pix = os.path.join(HERE, '..', 'system_files/usr/share/pixmaps')
+    os.makedirs(pix, exist_ok=True)
+    for n in (64, 256):
+        render(n, (0, 0, 0, 0)).save(os.path.join(pix, f'rimfrost-logo-{n}.png'))
+    render(256, (0, 0, 0, 0)).save(os.path.join(pix, 'rimfrost-logo.png'))
     sheet = Image.new('RGBA', (1000, 512), '#FFFFFF')
     sheet.paste(render(512), (0, 0))
     x = 530

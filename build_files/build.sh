@@ -56,6 +56,11 @@ for js in /usr/share/plasma/look-and-feel/com.valve.*/contents/plasmoidsetupscri
     sed -i "s|/usr/share/wallpapers/convergence.jxl|${WALLPAPER}|" "$js"
 done
 sed -i "s|/usr/share/wallpapers/convergence.jxl|${WALLPAPER}|g" /etc/xdg/kscreenlockerrc
+# The splash after login: our animated mark, for new users and as the default.
+for defaults in /usr/share/plasma/look-and-feel/com.valve.*/contents/defaults; do
+    sed -i 's|^Theme=com.valve.vapor$|Theme=org.rimfrost.splash|' "$defaults"
+done
+printf '[KSplash]\nEngine=KSplashQML\nTheme=org.rimfrost.splash\n' > /etc/xdg/ksplashrc
 for size in 64 256; do
     install -Dm644 "/usr/share/pixmaps/rimfrost-logo-${size}.png" \
         "/usr/share/icons/hicolor/${size}x${size}/apps/rimfrost-logo.png"
@@ -67,3 +72,5 @@ grep -q 'set-hostname rimfrost' /usr/libexec/bazzite-hardware-setup
 grep -q "$WALLPAPER" /etc/xdg/kscreenlockerrc
 jq -e --arg repo "ghcr.io/${IMAGE_VENDOR}" '.transports.docker[$repo]' /etc/containers/policy.json
 test -f "$WALLPAPER"
+grep -q 'Theme=org.rimfrost.splash' /etc/xdg/ksplashrc
+grep -q 'Theme=org.rimfrost.splash' /usr/share/plasma/look-and-feel/com.valve.vapor.desktop/contents/defaults

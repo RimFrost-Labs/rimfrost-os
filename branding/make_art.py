@@ -96,7 +96,4 @@ if __name__ == '__main__':
     for w, h in ((3840, 2160), (2560, 1440), (1920, 1080), (3440, 1440)):
         wallpaper(w, h).save(os.path.join(WALL_DIR, f'{w}x{h}.png'), optimize=True)
         print('wallpaper', w, h)
-    for n in (256, 64):
-        logo(n).save(os.path.join(LOGO_DIR, f'rimfrost-logo-{n}.png'))
-    logo(256).save(os.path.join(LOGO_DIR, 'rimfrost-logo.png'))
-    print('logo done')
+    # the logo itself comes from branding/logo.py
