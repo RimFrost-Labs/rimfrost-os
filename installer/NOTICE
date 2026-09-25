@@ -1,0 +1,5 @@
+This directory is adapted from the installer/ directory of Bazzite
+(https://github.com/ublue-os/bazzite, commit a1d305a), licensed under the
+Apache License 2.0. Changes for RimFrost OS: image names, live ISO labels and
+menu entries, branding strings, support links, the live session skipping the
+first-login guide, and the GNOME variants removed.
