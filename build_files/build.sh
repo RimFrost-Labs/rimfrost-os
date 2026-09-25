@@ -27,6 +27,8 @@ sed -i \
     -e "s|^BOOTLOADER_NAME=.*|BOOTLOADER_NAME=\"RimFrost OS (${BASE_VERSION})\"|" \
     /usr/lib/os-release
 echo "RIMFROST_IMAGE=\"${IMAGE_NAME}\"" >> /usr/lib/os-release
+# Bazzite's first-boot setup falls back to this name when the hostname is long.
+sed -i 's/hostnamectl set-hostname bazzite/hostnamectl set-hostname rimfrost/' /usr/libexec/bazzite-hardware-setup
 
 # The updater reads this to know which image to pull next time.
 jq --arg name "$IMAGE_NAME" --arg vendor "$IMAGE_VENDOR" \
@@ -58,6 +60,7 @@ done
 
 ### Checks #####################################################################
 grep -q 'RimFrost OS' /usr/lib/os-release
+grep -q 'set-hostname rimfrost' /usr/libexec/bazzite-hardware-setup
 grep -q "$WALLPAPER" /etc/xdg/kscreenlockerrc
 jq -e --arg repo "ghcr.io/${IMAGE_VENDOR}" '.transports.docker[$repo]' /etc/containers/policy.json
 test -f "$WALLPAPER"
