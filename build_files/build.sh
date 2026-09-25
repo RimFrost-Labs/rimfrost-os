@@ -1,27 +1,63 @@
 #!/bin/bash
+# Turns a Bazzite image into RimFrost OS. Runs inside the image build.
+# IMAGE_NAME (rimfrost-os or rimfrost-os-nvidia) and IMAGE_VENDOR come from
+# the Containerfile's build arguments.
 
 set -ouex pipefail
 
-# Copy the contents of system_files/ of the git repo to /
+IMAGE_NAME="${IMAGE_NAME:-rimfrost-os}"
+IMAGE_VENDOR="${IMAGE_VENDOR:-rimfrost-labs}"
+WALLPAPER=/usr/share/wallpapers/RimFrost/contents/images/3840x2160.png
+
+# Our files: wallpaper, logo, signing key, container policy pieces
 cp -avf "/ctx/system_files"/. /
 
-### Install packages
+### Identity ###################################################################
+# Keep ID=bazzite so Bazzite's own tools (ujust, the updater) keep working;
+# change what people see.
+BASE_VERSION=$(sed -n 's/^OSTREE_VERSION=//p' /usr/lib/os-release | tr -d "'\"")
+sed -i \
+    -e 's|^NAME=.*|NAME="RimFrost OS"|' \
+    -e 's|^PRETTY_NAME=.*|PRETTY_NAME="RimFrost OS"|' \
+    -e 's|^DEFAULT_HOSTNAME=.*|DEFAULT_HOSTNAME="rimfrost"|' \
+    -e 's|^HOME_URL=.*|HOME_URL="https://github.com/RimFrost-Labs/rimfrost-os"|' \
+    -e 's|^BUG_REPORT_URL=.*|BUG_REPORT_URL="https://github.com/RimFrost-Labs/rimfrost-os/issues"|' \
+    -e 's|^ANSI_COLOR=.*|ANSI_COLOR="0;38;2;170;214;240"|' \
+    -e 's|^LOGO=.*|LOGO=rimfrost-logo|' \
+    -e "s|^BOOTLOADER_NAME=.*|BOOTLOADER_NAME=\"RimFrost OS (${BASE_VERSION})\"|" \
+    /usr/lib/os-release
+echo "RIMFROST_IMAGE=\"${IMAGE_NAME}\"" >> /usr/lib/os-release
 
-# Packages can be installed from any enabled yum repo on the image.
-# RPMfusion repos are available by default in ublue main images
-# List of rpmfusion packages can be found here:
-# https://mirrors.rpmfusion.org/mirrorlist?path=free/fedora/updates/43/x86_64/repoview/index.html&protocol=https&redirect=1
+# The updater reads this to know which image to pull next time.
+jq --arg name "$IMAGE_NAME" --arg vendor "$IMAGE_VENDOR" \
+   '.["image-name"]=$name | .["image-vendor"]=$vendor
+    | .["image-ref"]="ostree-image-signed:docker://ghcr.io/\($vendor)/\($name)"
+    | .["image-tag"]="latest"' \
+   /usr/share/ublue-os/image-info.json > /tmp/image-info.json
+mv /tmp/image-info.json /usr/share/ublue-os/image-info.json
 
-# this installs a package from fedora repos
-dnf5 install -y tmux
+### Signed updates #############################################################
+# Only accept RimFrost images signed with our key.
+jq --arg repo "ghcr.io/${IMAGE_VENDOR}" \
+   '.transports.docker[$repo] = [{
+        "type": "sigstoreSigned",
+        "keyPath": "/etc/pki/containers/rimfrost-os.pub",
+        "signedIdentity": {"type": "matchRepository"}
+    }]' /etc/containers/policy.json > /tmp/policy.json
+mv /tmp/policy.json /etc/containers/policy.json
 
-# Use a COPR Example:
-#
-# dnf5 -y copr enable ublue-os/staging
-# dnf5 -y install package
-# Disable COPRs so they don't end up enabled on the final image:
-# dnf5 -y copr disable ublue-os/staging
+### Look #######################################################################
+for js in /usr/share/plasma/look-and-feel/com.valve.*/contents/plasmoidsetupscripts/org.kde.plasma.folder.js; do
+    sed -i "s|/usr/share/wallpapers/convergence.jxl|${WALLPAPER}|" "$js"
+done
+sed -i "s|/usr/share/wallpapers/convergence.jxl|${WALLPAPER}|g" /etc/xdg/kscreenlockerrc
+for size in 64 256; do
+    install -Dm644 "/usr/share/pixmaps/rimfrost-logo-${size}.png" \
+        "/usr/share/icons/hicolor/${size}x${size}/apps/rimfrost-logo.png"
+done
 
-#### Example for enabling a System Unit File
-
-systemctl enable podman.socket
+### Checks #####################################################################
+grep -q 'RimFrost OS' /usr/lib/os-release
+grep -q "$WALLPAPER" /etc/xdg/kscreenlockerrc
+jq -e --arg repo "ghcr.io/${IMAGE_VENDOR}" '.transports.docker[$repo]' /etc/containers/policy.json
+test -f "$WALLPAPER"

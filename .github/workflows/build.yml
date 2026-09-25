@@ -17,13 +17,23 @@ env:
   IMAGE_REGISTRY: "ghcr.io/${{ github.repository_owner }}"  # do not edit
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}-${{ inputs.brand_name}}-${{ inputs.stream_name }}
+  group: ${{ github.workflow }}-${{ github.ref || github.run_id }}
   cancel-in-progress: true
 
 jobs:
   build_push:
     name: Build and push image
     runs-on: ubuntu-26.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # AMD and Intel graphics
+          - image_name: rimfrost-os
+            base_image: ghcr.io/ublue-os/bazzite:stable
+          # Nvidia, Turing (RTX 20) and newer, open kernel modules
+          - image_name: rimfrost-os-nvidia
+            base_image: ghcr.io/ublue-os/bazzite-nvidia-open:stable
 
     permissions:
       contents: read
@@ -49,9 +59,8 @@ jobs:
       - name: Image Name
         id: image-name
         run: |
-          IMAGE_NAME=$(just image_name)
-
-          echo "IMAGE_NAME=${IMAGE_NAME}" >> $GITHUB_ENV
+          echo "IMAGE_NAME=${{ matrix.image_name }}" >> $GITHUB_ENV
+          echo "BASE_IMAGE=${{ matrix.base_image }}" >> $GITHUB_ENV
 
       - name: Default Tag
         id: gen-default-tag

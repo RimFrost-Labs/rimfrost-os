@@ -1,10 +1,16 @@
+# Base image: Bazzite for AMD/Intel, bazzite-nvidia-open for Nvidia (Turing
+# and newer). The build workflow passes BASE_IMAGE and IMAGE_NAME per variant.
+ARG BASE_IMAGE=ghcr.io/ublue-os/bazzite:stable
+
 # Allow build scripts to be referenced without being copied into the final image
 FROM scratch AS ctx
 COPY build_files /
 COPY system_files /system_files
 
 # Base Image
-FROM ghcr.io/ublue-os/bazzite:stable@sha256:9556db65991d57a03a7dc18e4ba28a686d8bcdcd6b61235aa69c8267bb22ff76
+FROM ${BASE_IMAGE}
+ARG IMAGE_NAME=rimfrost-os
+ARG IMAGE_VENDOR=rimfrost-labs
 ## Other possible base images include:
 # FROM ghcr.io/ublue-os/bazzite:testing
 # FROM ghcr.io/ublue-os/aurora:stable

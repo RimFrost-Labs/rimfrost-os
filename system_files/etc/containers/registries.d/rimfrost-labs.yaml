@@ -1,0 +1,3 @@
+docker:
+  ghcr.io/rimfrost-labs:
+    use-sigstore-attachments: true

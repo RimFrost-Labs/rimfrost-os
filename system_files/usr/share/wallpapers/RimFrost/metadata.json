@@ -1,0 +1,12 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "RimFrost Labs"
+            }
+        ],
+        "Id": "RimFrost",
+        "License": "CC-BY-SA-4.0",
+        "Name": "RimFrost"
+    }
+}
