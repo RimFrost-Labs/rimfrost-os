@@ -177,6 +177,14 @@ ostree-rechunk $target_image=image_name $tag=default_tag:
 
     GRAPHROOT="$(podman info --format '{{ '{{.Store.GraphRoot}}' }}')"
 
+    # Rechunking drops the image's labels (version, description, source);
+    # carry them over, except ostree's own which rpm-ostree writes anew.
+    LABEL_ARGS=()
+    while IFS= read -r kv; do
+        LABEL_ARGS+=("--label" "$kv")
+    done < <(podman inspect --format json "localhost/${target_image}:${tag}" \
+        | jq -r '.[0].Labels // {} | to_entries[] | select(.key | startswith("ostree.") | not) | "\(.key)=\(.value)"')
+
     podman run --rm --pull=never --privileged \
       --mount=type=image,src="${target_image}:${tag}",target=/rpm-ostree \
       --mount=type=bind,src=${GRAPHROOT},target=/run/host-container-storage,rw \
@@ -187,6 +195,7 @@ ostree-rechunk $target_image=image_name $tag=default_tag:
       --max-layers 127 \
       --format-version=2 \
       --bootc \
+      "${LABEL_ARGS[@]}" \
       --rootfs /rpm-ostree \
       --output "containers-storage:[overlay@/run/host-container-storage+/run/rpm-ostree-storage]localhost/${target_image}:${tag}"
 

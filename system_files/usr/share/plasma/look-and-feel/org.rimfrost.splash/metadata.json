@@ -1,0 +1,17 @@
+{
+    "KPackageStructure": "Plasma/LookAndFeel",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "RimFrost Labs"
+            }
+        ],
+        "Category": "",
+        "Description": "RimFrost OS splash screen",
+        "Id": "org.rimfrost.splash",
+        "License": "Apache-2.0",
+        "Name": "RimFrost",
+        "Version": "1.0",
+        "Website": "https://github.com/RimFrost-Labs/rimfrost-os"
+    }
+}
