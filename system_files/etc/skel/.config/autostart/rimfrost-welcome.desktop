@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Welcome to RimFrost OS
+Exec=rimfrost-welcome --first-run
+Icon=rimfrost-logo
+Terminal=false
+X-GNOME-Autostart-enabled=true
+X-KDE-autostart-phase=2

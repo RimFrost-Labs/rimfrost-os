@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Welcome to RimFrost OS
+GenericName=Welcome guide
+Comment=Steam, game mode, instant replay and which of your games work online
+Exec=rimfrost-welcome
+Icon=rimfrost-logo
+Categories=System;Settings;
+Keywords=welcome;guide;start;help;anti-cheat;games;

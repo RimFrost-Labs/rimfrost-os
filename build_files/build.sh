@@ -113,6 +113,19 @@ elif [ "${REQUIRE_CLIPFROST:-0}" = 1 ]; then
     exit 1
 fi
 
+### Welcome guide ##############################################################
+# RimFrost's short first-login guide replaces Bazzite Portal's autostart; the
+# Portal stays available from the guide's last page ("More apps and tools").
+chmod 755 /usr/libexec/rimfrost-welcome
+ln -sf /usr/libexec/rimfrost-welcome /usr/bin/rimfrost-welcome
+rm -f /etc/skel/.config/autostart/bazzite-portal.desktop
+# Anti-cheat status per game: Are We Anti-Cheat Yet (MIT). Fresh at every
+# build; the guide refreshes it weekly online.
+curl -fsSL --retry 3 -o /usr/share/rimfrost/welcome/awacy.json     https://raw.githubusercontent.com/AreWeAntiCheatYet/AreWeAntiCheatYet/HEAD/games.json
+python3 -c 'import json; assert len(json.load(open("/usr/share/rimfrost/welcome/awacy.json"))) > 500'
+printf 'Anti-cheat data: Are We Anti-Cheat Yet, https://areweanticheatyet.com\nMIT License, Copyright (c) AreWeAntiCheatYet contributors\n' \
+    > /usr/share/rimfrost/welcome/awacy.LICENSE
+
 ### Test telemetry ###########################################################
 # Off unless a test machine is enrolled (sudo rimfrost-telemetry enroll ...).
 chmod 755 /usr/libexec/rimfrost-telemetry
@@ -170,3 +183,5 @@ lsinitrd -f usr/lib/initrd-release "/usr/lib/modules/$KVER/initramfs.img" | grep
 getcap /usr/bin/gsr-kms-server | grep -q cap_sys_admin
 ! systemctl is-enabled rimfrost-telemetry.service >/dev/null 2>&1
 test -x /usr/lib64/librimfrost_framemeter.so
+test -f /etc/skel/.config/autostart/rimfrost-welcome.desktop
+! test -e /etc/skel/.config/autostart/bazzite-portal.desktop
