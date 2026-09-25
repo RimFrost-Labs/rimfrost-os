@@ -27,6 +27,9 @@ sed -i \
     -e "s|^BOOTLOADER_NAME=.*|BOOTLOADER_NAME=\"RimFrost OS (${BASE_VERSION})\"|" \
     /usr/lib/os-release
 echo "RIMFROST_IMAGE=\"${IMAGE_NAME}\"" >> /usr/lib/os-release
+# The initramfs still carries Bazzite's os-release, so systemd's fallback
+# hostname would stay "bazzite"; ship a real default instead.
+echo rimfrost > /etc/hostname
 # Bazzite's first-boot setup falls back to this name when the hostname is long.
 sed -i 's/hostnamectl set-hostname bazzite/hostnamectl set-hostname rimfrost/' /usr/libexec/bazzite-hardware-setup
 
