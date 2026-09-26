@@ -143,6 +143,8 @@ systemctl enable rimfrost-finish-setup.service
 # Installed with RimFrost Setup (the Windows installer): remove its installer
 # partitions and ESP entry, and grow into their room.
 systemctl enable rimfrost-setup-cleanup.service
+# Next to Windows: Windows in the start menu, and the menu shown
+systemctl enable rimfrost-dualboot.service
 
 ### Package sources ##########################################################
 # Bazzite ships the terra repos disabled. bootc-image-builder still reads them
@@ -197,6 +199,8 @@ grep -q '^DEFAULT_HOSTNAME="rimfrost"' /tmp/initrd-release
 ! systemctl is-enabled rimfrost-telemetry.service >/dev/null 2>&1
 systemctl is-enabled rimfrost-finish-setup.service
 systemctl is-enabled rimfrost-setup-cleanup.service
+systemctl is-enabled rimfrost-dualboot.service
+bash -n /usr/libexec/rimfrost-dualboot
 bash -n /usr/libexec/rimfrost-setup-cleanup
 bash -n /usr/libexec/rimfrost-finish-setup
 command -v jq notify-send

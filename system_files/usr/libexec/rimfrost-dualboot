@@ -1,0 +1,54 @@
+#!/usr/bin/bash
+# RimFrost OS: when Windows is on this PC, put it in the start menu (GRUB) and
+# show the menu for 5 seconds, so people can choose every time they turn on
+# their PC. Fedora keeps os-prober off, and the boot menu is otherwise hidden.
+# GRUB reads /boot/grub2/custom.cfg at the end of its own config.
+set -euo pipefail
+
+cfg=/boot/grub2/custom.cfg
+marker="# Written by rimfrost-dualboot"
+
+entries=""
+while read -r dev type uuid; do
+    [[ "$type" == c12a7328-f81f-11d2-ba4b-00a0c93ec93b ]] || continue
+    mnt=$(findmnt -rno TARGET "$dev" | head -1 || true)
+    tmp=""
+    if [[ -z "$mnt" ]]; then
+        tmp=$(mktemp -d)
+        mount -o ro "$dev" "$tmp" 2>/dev/null || { rmdir "$tmp"; continue; }
+        mnt=$tmp
+    fi
+    # FAT is case-insensitive, but look the file up case-insensitively too
+    found=$(find "$mnt/EFI" -maxdepth 3 -ipath '*/microsoft/boot/bootmgfw.efi' 2>/dev/null | head -1 || true)
+    if [[ -n "$tmp" ]]; then umount "$tmp"; rmdir "$tmp"; fi
+    [[ -n "$found" ]] || continue
+    entries+="menuentry 'Windows' --class windows --class os {
+  insmod part_gpt
+  insmod fat
+  search --no-floppy --fs-uuid --set=root $uuid
+  chainloader /EFI/Microsoft/Boot/bootmgfw.efi
+}
+"
+done < <(lsblk -rno PATH,PARTTYPE,UUID)
+
+# Never overwrite a custom.cfg someone else wrote
+if [[ -f "$cfg" ]] && ! grep -q "^$marker" "$cfg"; then
+    echo "$cfg was not written by us; leaving it alone"
+    exit 0
+fi
+
+if [[ -z "$entries" ]]; then
+    [[ -f "$cfg" ]] && rm -f "$cfg" && echo "no Windows found; removed our entry"
+    exit 0
+fi
+
+new="$marker. Removed again when Windows is gone.
+$entries
+# Show the menu so Windows can be chosen
+set timeout_style=menu
+set timeout=5
+"
+if [[ "$(cat "$cfg" 2>/dev/null)" != "$new" ]]; then
+    printf '%s' "$new" > "$cfg.tmp" && mv "$cfg.tmp" "$cfg"
+    echo "Windows added to the start menu"
+fi

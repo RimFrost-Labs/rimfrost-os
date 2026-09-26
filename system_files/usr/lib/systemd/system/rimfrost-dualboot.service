@@ -1,0 +1,10 @@
+[Unit]
+Description=RimFrost OS: put Windows in the start menu when it is on this PC
+After=local-fs.target boot.mount boot-efi.mount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/rimfrost-dualboot
+
+[Install]
+WantedBy=multi-user.target
