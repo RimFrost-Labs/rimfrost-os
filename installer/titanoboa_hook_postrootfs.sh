@@ -113,7 +113,36 @@ ostreecontainer --url=$imageref:$imagetag --transport=containers-storage --no-si
 %include /usr/share/anaconda/post-scripts/restore-selinux-labels.ks
 %include /usr/share/anaconda/post-scripts/secureboot-enroll-key.ks
 %include /usr/share/anaconda/post-scripts/secureboot-docs.ks
+%include /usr/share/anaconda/post-scripts/rimfrost-restart.ks
 
+EOF
+
+# RimFrost: restart into the installed system by itself. Runs last, so the
+# Secure Boot note above has been read. The restart waits until the installer
+# has finished writing (its log is quiet), so nothing is cut off.
+cat <<'EOF' >/usr/share/anaconda/post-scripts/rimfrost-restart.ks
+%post --nochroot --log=/tmp/anacoda_custom_logs/rimfrost-restart.log
+systemd-run --unit=rimfrost-restart --collect bash -c '
+    msg="<span size=\"x-large\"><b>RimFrost OS is installed</b></span>
+
+Your PC restarts into RimFrost OS in 30 seconds.
+Take out the USB stick when the screen goes dark.
+The first start finishes setting up in the background."
+    run0 --user=liveuser yad --on-top --center --title="RimFrost OS" \
+        --text="$msg" --text-align=center --buttons-layout=center \
+        --timeout=30 --timeout-indicator=bottom \
+        --button="Restart now:0" --button="Later:1"
+    rc=$?
+    [ "$rc" = 1 ] && exit 0
+    # Wait until the installer has stopped writing (at most 10 minutes)
+    for _ in $(seq 120); do
+        a=$(stat -c %s /tmp/anaconda.log 2>/dev/null); sleep 5
+        [ "$a" = "$(stat -c %s /tmp/anaconda.log 2>/dev/null)" ] && break
+    done
+    sync
+    systemctl reboot
+'
+%end
 EOF
 
 # Signed Images
