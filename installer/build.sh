@@ -49,8 +49,12 @@ elif [[ "$desktop_env" == "kde" ]]; then
     cp -a /src/system_files/kde/. /
 fi
 
-# RimFrost: the live session shows the installer, not the first-login guide
+# RimFrost: the live session is the demo. It shows the demo welcome (in
+# on_gui_login.sh), not the first-login guide, and has a few pictures to open.
 rm -f /etc/skel/.config/autostart/rimfrost-welcome.desktop
+mkdir -p /etc/skel/Pictures/RimFrost
+cp /usr/share/wallpapers/RimFrost/contents/images/*.png /etc/skel/Pictures/RimFrost/
+cp /usr/share/pixmaps/rimfrost-logo.png /etc/skel/Pictures/RimFrost/
 
 # Run the preinitramfs hook
 "$SCRIPT_DIR/titanoboa_hook_preinitramfs.sh"
@@ -77,6 +81,12 @@ systemctl enable livesys.service livesys-late.service
 # Copy system files
 echo "Copying overrides of system files..."
 cp -af /src/system_files/overrides/. /
+
+# The desktop installer icon says what it installs
+for f in /usr/share/applications/liveinst.desktop /usr/share/applications/org.fedoraproject.AnacondaInstaller.desktop; do
+    [ -f "$f" ] || continue
+    sed -i -e '/^Name\[/d' -e 's/^Name=.*/Name=Install RimFrost OS/' "$f"
+done
 
 # image-builder needs gcdx64.efi
 dnf install -y grub2-efi-x64-cdboot

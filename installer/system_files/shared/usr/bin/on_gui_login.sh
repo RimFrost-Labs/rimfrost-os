@@ -65,29 +65,47 @@ welcome_dialog() {
     _EXITLOCK=1
     _RETVAL=0
     local welcome_text="
-Welcome to the Live ISO for RimFrost OS\\!
+<span size='x-large'><b>Welcome to the RimFrost OS demo</b></span>
 
-The Live ISO is designed for installation and troubleshooting.
-It does <b>not</b> have drivers and is <b>not capable of playing games.</b>
+You're running RimFrost OS straight from the USB stick.
+Look around: open apps, files and pictures, and check that
+your screen, sound and network work. Nothing on your PC changes.
 
-Please <b>do not use it in benchmarks</b> as it
-does not represent the installed experience."
-    local welcome_title="Welcome"
+<b>Ready to play?</b> Install RimFrost OS. Games, graphics drivers
+and game mode are set up on the installed system, and it runs
+much faster than from a USB stick."
+    local welcome_title="RimFrost OS demo"
     local install_button="Install RimFrost OS"
-    local restore_button="Launch Bootloader Restoring tool"
-    local close_button="Close dialog"
-    if is_swedish_locale; then
+    local restore_button="Repair the boot menu"
+    local close_button="Keep exploring"
+    if [[ "${LC_MESSAGES:-${LANG:-C}}" == da* ]]; then
         welcome_text="
-Välkommen till RimFrost OSs Live ISO!\n
-Live ISO-avbildningen är avsedd för installation och felsökning.
-Den har <b>inte</b> drivrutiner och kan <b>inte köra spel.</b>
+<span size='x-large'><b>Velkommen til RimFrost OS demoen</b></span>
 
-Använd den <b>inte för prestandatester</b> eftersom den
-inte representerar den installerade upplevelsen."
-        welcome_title="Välkommen"
+Du kører RimFrost OS direkte fra USB-stikket.
+Kig dig omkring: åbn programmer, filer og billeder, og tjek at
+skærm, lyd og netværk virker. Intet på din PC bliver ændret.
+
+<b>Klar til at spille?</b> Installer RimFrost OS. Spil, grafikdrivere
+og game mode sættes op på det installerede system, og det kører
+langt hurtigere end fra et USB-stik."
+        welcome_title="RimFrost OS demo"
+        install_button="Installer RimFrost OS"
+        restore_button="Reparer startmenuen"
+        close_button="Kig videre"
+    elif is_swedish_locale; then
+        welcome_text="
+<span size='x-large'><b>Välkommen till RimFrost OS-demon</b></span>
+
+Du kör RimFrost OS direkt från USB-minnet. Titta runt, öppna
+program, filer och bilder. Inget på din dator ändras.
+
+<b>Redo att spela?</b> Installera RimFrost OS: spel, drivrutiner
+och spelläge ställs in på det installerade systemet."
+        welcome_title="RimFrost OS-demo"
         install_button="Installera RimFrost OS"
-        restore_button="Starta verktyget för återställning av starthanteraren"
-        close_button="Stäng dialogrutan"
+        restore_button="Reparera startmenyn"
+        close_button="Titta vidare"
     fi
     while [[ $_EXITLOCK -eq 1 ]]; do
         yad \

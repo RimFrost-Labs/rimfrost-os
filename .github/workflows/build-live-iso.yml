@@ -1,9 +1,9 @@
 ---
-# Live ISOs: boot RimFrost OS from a USB stick to try it, and install it from
-# there (Anaconda). Built like Bazzite's live ISOs (installer/ is adapted from
+# Demo ISOs: boot RimFrost OS from a USB stick to try it (the live session
+# is the demo) and install it from there (Anaconda). Built like Bazzite's live ISOs (installer/ is adapted from
 # Bazzite, see installer/NOTICE) with titanoboa, signed with our cosign key and
-# uploaded to R2 as <image>-live.iso.
-name: Build live ISOs
+# uploaded to R2 as <image>-demo.iso.
+name: Build demo ISOs
 
 on:
   workflow_dispatch:
@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   build-live-iso:
-    name: Live ISO (${{ matrix.image_name }})
+    name: Demo ISO (${{ matrix.image_name }})
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -64,13 +64,13 @@ jobs:
         uses: Zeglius/titanoboa@7737f4748458252ac827dca14b3d6dd09298472a # revamp-pr, as used by Bazzite
         with:
           image-ref: localhost/payload:latest
-          iso-dest: ${{ github.workspace }}/${{ matrix.image_name }}-live.iso
+          iso-dest: ${{ github.workspace }}/${{ matrix.image_name }}-demo.iso
 
       - name: Checksum
         id: sums
         run: |
           iso="${{ steps.build.outputs.iso-dest }}"
-          name="${{ matrix.image_name }}-live.iso"
+          name="${{ matrix.image_name }}-demo.iso"
           # titanoboa may leave the file in its own action directory
           [ "$(realpath "$iso")" = "$(realpath -m "$name")" ] || mv "$iso" "$name"
           sha256sum "$name" | tee "$name.sha256"
@@ -86,8 +86,8 @@ jobs:
           SIGNING_KEY: ${{ secrets.SIGNING_SECRET }}
         run: |
           cosign sign-blob -y --new-bundle-format=false --use-signing-config=false \
-            --key env://SIGNING_KEY "${{ matrix.image_name }}-live.iso" \
-            --output-signature "${{ matrix.image_name }}-live.iso.sig"
+            --key env://SIGNING_KEY "${{ matrix.image_name }}-demo.iso" \
+            --output-signature "${{ matrix.image_name }}-demo.iso.sig"
 
       - name: Upload to R2
         env:
@@ -103,7 +103,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update -q
           sudo apt-get install -y -q rclone
-          n="${{ matrix.image_name }}-live.iso"
+          n="${{ matrix.image_name }}-demo.iso"
           rclone copyto --s3-upload-concurrency 8 "$n" "S3:$BUCKET/$n"
           rclone copyto "$n.sha256" "S3:$BUCKET/$n.sha256"
           rclone copyto "$n.sig" "S3:$BUCKET/$n.sig"
