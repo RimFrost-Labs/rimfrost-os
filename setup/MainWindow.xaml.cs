@@ -79,7 +79,8 @@ namespace RimFrostSetup
             }
             SizeSlider.Maximum = maxGb;
             SizeSlider.Value = Math.Min(maxGb, Math.Max(64, Math.Round(maxGb / 2 / 8) * 8));
-            SizeHint.Text = $"Windows keeps {SystemCheck.Gb(sys.CSize - (long)(SizeSlider.Value * SystemInfo.GB) - StagingEstimate)} and all its files.";
+            // ValueChanged doesn't fire when the value stays at the minimum
+            Size_Changed(null, null);
         }
 
         void Size_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)

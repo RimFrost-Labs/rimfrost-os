@@ -33,7 +33,9 @@ namespace RimFrostSetup
         public static async Task<long> GetIsoSize(CancellationToken ct)
         {
             using (var req = new HttpRequestMessage(HttpMethod.Head, BaseUrl + IsoName))
-            using (var resp = await Http.SendAsync(req, ct))
+            // Headers only: with the default the client tries to buffer the
+            // announced 8 GB and refuses (2 GB buffer limit)
+            using (var resp = await Http.SendAsync(req, HttpCompletionOption.ResponseHeadersRead, ct))
             {
                 resp.EnsureSuccessStatusCode();
                 return resp.Content.Headers.ContentLength ?? throw new InvalidOperationException("The server didn't say how big the download is.");
