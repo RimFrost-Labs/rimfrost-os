@@ -46,6 +46,9 @@ done < <(lsblk -rno PATH,LABEL,FSTYPE)
 
 (( ${#staging[@]} > 0 )) && from_setup=1
 if (( from_setup == 0 )); then
+    # An earlier run may have stopped after growing the partition; this is a
+    # no-op when the filesystem already fills it
+    btrfs filesystem resize max /var >/dev/null 2>&1 || true
     mkdir -p "${done_flag%/*}" && touch "$done_flag"
     exit 0
 fi
