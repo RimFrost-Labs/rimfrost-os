@@ -77,6 +77,30 @@ for defaults in /usr/share/plasma/look-and-feel/com.valve.*/contents/defaults; d
     sed -i 's|^Theme=com.valve.vapor$|Theme=org.rimfrost.splash|' "$defaults"
 done
 printf '[KSplash]\nEngine=KSplashQML\nTheme=org.rimfrost.splash\n' > /etc/xdg/ksplashrc
+# The login screen (Plasma Login Manager) shows our wallpaper too
+mkdir -p /etc/plasmalogin.conf.d
+cat > /etc/plasmalogin.conf.d/10-rimfrost.conf <<EOF
+[Greeter][Wallpaper][org.kde.image][General]
+Image=file://${WALLPAPER}
+PreviewImage=file://${WALLPAPER}
+EOF
+# The installer already creates the account, so KDE's own first-start guide
+# (language, keyboard, user) would only ask the same things again
+systemctl disable plasma-setup.service
+# The terminal greeting: ours, not Bazzite's
+cat > /usr/share/ublue-os/motd/template.md <<'EOF'
+# Welcome to RimFrost OS
+`${MOTD_IMAGE_NAME}:${MOTD_IMAGE_BRANCH}`
+
+|  Command | Description |
+| ------- | ----------- |
+| `rimfrost-gamemode status` | What game mode is doing |
+| `ujust --choose` | More commands |
+| `ujust toggle-user-motd` | Turn this greeting off |
+
+- Report a problem: https://github.com/RimFrost-Labs/rimfrost-os/issues
+EOF
+cp /usr/share/ublue-os/motd/template.md /usr/share/ublue-os/motd/template.sv.md
 for size in 64 256; do
     install -Dm644 "/usr/share/pixmaps/rimfrost-logo-${size}.png" \
         "/usr/share/icons/hicolor/${size}x${size}/apps/rimfrost-logo.png"
@@ -184,6 +208,9 @@ grep -q 'set-hostname rimfrost' /usr/libexec/bazzite-hardware-setup
 grep -q "$WALLPAPER" /etc/xdg/kscreenlockerrc
 jq -e --arg repo "ghcr.io/${IMAGE_VENDOR}" '.transports.docker[$repo]' /etc/containers/policy.json
 test -f "$WALLPAPER"
+grep -q "$WALLPAPER" /etc/plasmalogin.conf.d/10-rimfrost.conf
+! systemctl is-enabled plasma-setup.service >/dev/null 2>&1
+grep -q "RimFrost OS" /usr/share/ublue-os/motd/template.md
 grep -q 'Theme=org.rimfrost.splash' /etc/xdg/ksplashrc
 grep -q 'Theme=org.rimfrost.splash' /usr/share/plasma/look-and-feel/com.valve.vapor.desktop/contents/defaults
 python3 -c 'import ast, sys; [ast.parse(open(f).read(), f) for f in sys.argv[1:]]' \
