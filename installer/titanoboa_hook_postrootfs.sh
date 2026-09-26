@@ -83,6 +83,15 @@ fi
 rm -rf /mnt/sysroot/boot/efi/EFI/fedora
 %end
 
+# RimFrost Setup (the Windows installer) starts this installer through
+# \EFI\RimFrostSetup\grub.cfg. ostree takes any EFI/<dir>/grub.cfg as the place
+# for its own boot menu and then fails, so move ours aside: GRUB has already
+# read it. rimfrost-setup-cleanup removes the folder on the first start.
+%pre-install --log=/tmp/anacoda_custom_logs/rimfrost-setup.log
+f=/mnt/sysroot/boot/efi/EFI/RimFrostSetup/grub.cfg
+if [ -f "\$f" ]; then mv -v "\$f" "\$f.used"; fi
+%end
+
 # Relabel the boot partition for the
 %pre-install --erroronfail --log=/tmp/anacoda_custom_logs/repartitioning.log
 set -x
