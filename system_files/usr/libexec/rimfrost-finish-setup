@@ -1,0 +1,48 @@
+#!/usr/bin/bash
+# RimFrost OS: finish the install on the first start.
+#
+# The ISO installs the AMD/Intel system everywhere. On a PC with a current
+# Nvidia card the installer points updates at the Nvidia system instead; here
+# we fetch it in the background and restart into it, telling the user first.
+# Without internet we wait, and the PC keeps working on the open driver.
+set -uo pipefail
+
+done_flag=/var/lib/rimfrost/setup-done
+
+status() { bootc status --format json 2>/dev/null; }
+wanted=$(status | jq -r '.spec.image.image // empty')
+booted=$(status | jq -r '.status.booted.image.image.image // empty')
+echo "wanted=$wanted booted=$booted"
+
+if [[ -z "$wanted" || -z "$booted" || "$wanted" == "$booted" ]]; then
+    mkdir -p "${done_flag%/*}" && touch "$done_flag"
+    exit 0
+fi
+
+# Show a desktop notification to everyone logged in
+notify() {
+    local user
+    for user in $(loginctl list-users --no-legend 2>/dev/null | awk '$1 >= 1000 {print $2}'); do
+        systemd-run --quiet --wait --user --machine="$user@" \
+            notify-send -a "RimFrost OS" -i rimfrost-logo -u critical "$1" "$2" 2>/dev/null || true
+    done
+}
+
+sleep 20   # let the desktop come up so the first message is seen
+notify "Setting up your Nvidia graphics driver" \
+    "This happens in the background. Your PC restarts by itself when it's done."
+
+until curl -fsS -o /dev/null --max-time 15 https://ghcr.io/v2/; do
+    echo "waiting for internet"
+    sleep 30
+done
+
+until bootc upgrade --quiet; do
+    echo "download failed, trying again in 2 minutes"
+    sleep 120
+done
+
+notify "Restarting in 1 minute" \
+    "Your Nvidia graphics driver is ready. Save what you're working on."
+sleep 60
+systemctl reboot

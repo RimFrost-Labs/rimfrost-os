@@ -61,216 +61,37 @@ serve_docs() {
         fg >/dev/null 2>&1 || true
     fi
 }
-welcome_dialog() {
-    _EXITLOCK=1
-    _RETVAL=0
-    local welcome_text="
-<span size='x-large'><b>Welcome to the RimFrost OS demo</b></span>
-
-You're running RimFrost OS straight from the USB stick.
-Look around: open apps, files and pictures, and check that
-your screen, sound and network work. Nothing on your PC changes.
-
-<b>Ready to play?</b> Install RimFrost OS. Games, graphics drivers
-and game mode are set up on the installed system, and it runs
-much faster than from a USB stick."
-    local welcome_title="RimFrost OS demo"
-    local install_button="Install RimFrost OS"
-    local restore_button="Repair the boot menu"
-    local close_button="Keep exploring"
-    if [[ "${LC_MESSAGES:-${LANG:-C}}" == da* ]]; then
-        welcome_text="
-<span size='x-large'><b>Velkommen til RimFrost OS demoen</b></span>
-
-Du kører RimFrost OS direkte fra USB-stikket.
-Kig dig omkring: åbn programmer, filer og billeder, og tjek at
-skærm, lyd og netværk virker. Intet på din PC bliver ændret.
-
-<b>Klar til at spille?</b> Installer RimFrost OS. Spil, grafikdrivere
-og game mode sættes op på det installerede system, og det kører
-langt hurtigere end fra et USB-stik."
-        welcome_title="RimFrost OS demo"
-        install_button="Installer RimFrost OS"
-        restore_button="Reparer startmenuen"
-        close_button="Kig videre"
-    elif is_swedish_locale; then
-        welcome_text="
-<span size='x-large'><b>Välkommen till RimFrost OS-demon</b></span>
-
-Du kör RimFrost OS direkt från USB-minnet. Titta runt, öppna
-program, filer och bilder. Inget på din dator ändras.
-
-<b>Redo att spela?</b> Installera RimFrost OS: spel, drivrutiner
-och spelläge ställs in på det installerade systemet."
-        welcome_title="RimFrost OS-demo"
-        install_button="Installera RimFrost OS"
-        restore_button="Reparera startmenyn"
-        close_button="Titta vidare"
-    fi
-    while [[ $_EXITLOCK -eq 1 ]]; do
-        yad \
-            --no-escape \
-            --on-top \
-            --timeout-indicator=bottom \
-            --text-align=center \
-            --buttons-layout=center \
-            --title="$welcome_title" \
-            --text="$welcome_text" \
-            --button="$install_button:10" \
-            --button="$restore_button:20" \
-            --button="$close_button:0"
-        _RETVAL=$?
-        case $_RETVAL in
-        10)
-            liveinst &
-            disown $!
-            _EXITLOCK=0
-            ;;
-        20)
-            /usr/bin/bootloader_restore &
-            disown $!
-            _EXITLOCK=0
-            ;;
-        0) _EXITLOCK=0 ;;
-        esac
-    done
-    unset -v _EXITLOCK
-    unset -v _RETVAL
-}
+# RimFrost: one ISO for every PC. Current Nvidia cards get the Nvidia system
+# after the install by themselves; older ones stay on the open driver, so say
+# that games will run slowly on them before anything is installed.
 nvidia_hardware_helper() {
-    timeout_seconds=15
-    local recommend_wrong_image="" # Initialize to prevent SC2154
-    if ! gpuinfo="$(timeout $timeout_seconds lspci -nn | grep '\[03')"; then
-        return 124
+    local support
+    support=$(/usr/libexec/bazzite-detect-nvidia-support-status 2>/dev/null) || return 0
+    [[ -z "$support" || "$support" == supported ]] && return 0
+    local title="Older Nvidia graphics card"
+    local text="<b>Your Nvidia graphics card is older than RTX / GTX 16.</b>
+
+Nvidia's current driver doesn't support it, so RimFrost OS runs it with the
+open driver. The desktop works, but games will run slowly.
+
+$(lspci -nn | grep '\[03' | sed 's/^[^ ]* //')"
+    local install_button="Install anyway" off_button="Turn off the PC"
+    if [[ "${LC_MESSAGES:-${LANG:-C}}" == da* ]]; then
+        title="Ældre Nvidia-grafikkort"
+        text="<b>Dit Nvidia-grafikkort er ældre end RTX / GTX 16.</b>
+
+Nvidias nuværende driver understøtter det ikke, så RimFrost OS bruger den
+åbne driver. Skrivebordet virker, men spil kører langsomt.
+
+$(lspci -nn | grep '\[03' | sed 's/^[^ ]* //')"
+        install_button="Installer alligevel" off_button="Sluk PC'en"
     fi
-    image_name=$(timeout $timeout_seconds sudo podman images --format '{{ index .Names 0 }}\n' 'rimfrost*')
-    if [ -z "$image_name" ]; then
-        return 124
-    fi
-    #Call NVIDIA detection script
-    if [[ -x "/usr/libexec/bazzite-detect-nvidia-support-status" ]]; then
-        output=$("/usr/libexec/bazzite-detect-nvidia-support-status")
-        ret_val=$?
-        # handle exit codes
-        if [ $ret_val -eq 0 ] && [ "$output" == "" ]; then
-            echo "no NVIDIA GPU"
-            return 0
-        fi
-        if [ $ret_val -eq 124 ]; then
-            return 124
-        fi
-        support_status=$output
-        echo "support status: $support_status"
-        if [ "$support_status" == "legacy" ]; then
-            correct_image="<b>Nvidia (GTX 9xx-10xx Series)</b>\n"
-        fi
-        if [ "$support_status" == "supported" ]; then
-            correct_image="<b>Nvidia (RTX Series | GTX 16xx Series+)</b>"
-        fi
-        # parse image information
-        if [[ $image_name == *-nvidia-open* ]]; then
-            echo "modern nvidia desktop image detected"
-            image="nvidia-desktop"
-        elif [[ $image_name == *-deck-nvidia* ]]; then
-            echo "modern nvidia deck image detected!"
-            image="nvidia-deck"
-        elif [[ $image_name == *-nvidia:* ]]; then
-            echo "legacy nvidia image detected!"
-            image="legacy"
-        else
-            echo "AMD/Intel image detected!"
-            image="amd_intel"
-        fi
-        #user facing text
-        title="RimFrost OS Hardware Helper"
-        image_detected="Detected RimFrost OS version: $(echo "$image_name" |  cut -d '/' -f3)\n\n"
-        qrencode -o "\$SUPPORT_QR" "https://github.com/RimFrost-Labs/rimfrost-os/issues"
-        support="\n\n\nPlease visit our <a href=\"https://github.com/RimFrost-Labs/rimfrost-os/issues\"><b>GitHub page</b></a> (scan the QR code) and tell us what happened."
-        heading_nvidia_deck="<b>STEAM GAMING MODE IN BETA ON NVIDIA HARDWARE</b>\n"
-        detected_nvidia_deck="WARNING: Nvidia GPU Support in Steam Gaming mode and on HTPCs is available as a beta with known issues that <b>cannot be fixed</b> by RimFrost OS.\n\n"
-        recommend_nvidia_deck="Unless you're a Linux driver developer, or looking for a known-broken toy to play with, we <b>strongly recommend</b> using one of our Desktop images without Steam Gaming Mode."
-        heading_unsupported="<b>Unsupported Graphics Card</b>\n"
-        detected_unsupported="We've detected you're using a now unsupported NVIDIA GPU.\nUnfortunately, we cannot provide good support for your hardware ourselves.\n"
-        recommend_unsupported="Please read our <a href=\"http://127.0.0.1:1290/General/FAQ/#will-support-for-much-older-nvidia-graphics-cards-be-added\"><b>documentation</b></a> for more information.\n"
-        heading_unknown="<b>Unknown Graphics Card</b>\n"
-        detected_unknown="We could not identify your NVIDIA graphics card.\n"
-        recommend_unknown="It is not recommended to install RimFrost OS as we cannot guarantee your hardware will work."
-        heading_wrong_image="<b>WRONG IMAGE DETECTED</b>\n"
-        detected_wrong_image="Your $support_status NVIDIA graphics card needs a different version of RimFrost OS.\n"
-        recommend_wrong_image="Pick $correct_image as \"vendor of your primary GPU\" on the website to download and install the correct version instead."
-        button1="I KNOW WHAT I AM DOING. Install RimFrost OS Anyway:0"
-        button2="Power Off:1"
-        heading2="More Information"
-        button3="More Information:2"
-        if is_swedish_locale; then
-            title="RimFrost OS hårdvaruhjälp"
-            image_detected="Identifierad RimFrost OS-version: $(echo "$image_name" | cut -d '/' -f3)\n\n"
-            support="\n\n\nBesök vår <a href=\"https://github.com/RimFrost-Labs/rimfrost-os/issues\"><b>GitHub-sida</b></a> (skanna QR-koden) för att få hjälp."
-            heading_nvidia_deck="<b>STEAMS SPELLÄGE ÄR BETA PÅ NVIDIA-HÅRDVARA</b>\n"
-            detected_nvidia_deck="VARNING: Stöd för Nvidia-GPU:er i Steams spelläge och på HTPC:er är en beta med kända problem som RimFrost OS <b>inte kan åtgärda</b>.\n\n"
-            recommend_nvidia_deck="Om du inte utvecklar Linux-drivrutiner eller vill experimentera med något som är känt för att inte fungera, <b>rekommenderar vi starkt</b> en av våra skrivbordsavbildningar utan Steams spelläge."
-            heading_unsupported="<b>Grafikkortet stöds inte</b>\n"
-            detected_unsupported="Vi har identifierat att du använder en Nvidia-GPU som inte längre stöds.\nTyvärr kan vi inte själva ge bra stöd för din maskinvara.\n"
-            recommend_unsupported="Läs vår <a href=\"http://127.0.0.1:1290/General/FAQ/#will-support-for-much-older-nvidia-graphics-cards-be-added\"><b>dokumentation</b></a> för mer information.\n"
-            heading_unknown="<b>Okänt grafikkort</b>\n"
-            detected_unknown="Vi kunde inte identifiera din Nvidia-GPU.\n"
-            recommend_unknown="Vi rekommenderar inte att du installerar RimFrost OS, eftersom vi inte kan garantera att din maskinvara fungerar."
-            heading_wrong_image="<b>FEL AVBILDNING IDENTIFIERAD</b>\n"
-            detected_wrong_image="Din Nvidia-GPU med statusen $support_status behöver en annan RimFrost OS-version.\n"
-            recommend_wrong_image="Välj $correct_image som \"tillverkare av din primära GPU\" på webbplatsen för att hämta och installera rätt version."
-            button1="JAG VET VAD JAG GÖR. Installera RimFrost OS ändå:0"
-            button2="Stäng av:1"
-            heading2="Mer information"
-            button3="Mer information:2"
-        fi
-        if [[ "$support_status" = "unsupported" ]]; then
-            serve_docs
-            heading="$heading_unsupported"
-            gpu_detected="$detected_unsupported"
-            recommendation="$recommend_unsupported"
-        elif [[ "$support_status" = "unknown" ]]; then
-            heading="$heading_unknown"
-            gpu_detected="$detected_unknown"
-            recommendation="$recommend_unknown"
-        elif [[ "$support_status" = "legacy" ]] && [[ "$image" = "legacy" ]]; then
-            echo "legacy GPU matches legacy image. Nothing to do. Exiting…"
-            return 0
-        elif [[ "$support_status" = "supported" ]] && [[ "$image" = "nvidia-deck"  ]]; then
-            heading="$heading_nvidia_deck"
-            gpu_detected="$detected_nvidia_deck"
-            recommendation="$recommend_nvidia_deck"
-        elif [[ "$support_status" = "supported" ]] && [[ "$image" = "nvidia-desktop" ]]; then
-            echo "supported GPU matches modern desktop image. Nothing to do. Exiting…"
-            return 0
-        elif [[ "$support_status" = "supported" ]] && [[ "$image" != "nvidia-desktop" ]] || [[ "$image" != "nvidia-deck"  ]]; then
-            heading="$heading_wrong_image"
-            gpu_detected="$detected_wrong_image"
-            recommendation="$recommend_wrong_image"
-        elif [[ "$support_status" = "legacy" ]] && [[ "$image" != "legacy" ]]; then
-            heading="$heading_wrong_image"
-            gpu_detected="$detected_wrong_image"
-            recommendation="$recommend_wrong_image"
-        fi
-        while true; do
-            yad --warning --buttons-layout=center --text-align=center --title="$title" --text="$heading""$gpu_detected""$recommendation" \
-                --button="$button1" \
-                --button="$button2" \
-                --button="$button3"
-            case $? in
-            0) return 0 ;;
-            1)
-                systemctl poweroff || shutdown -h now || true
-                break
-                ;;
-            2)
-                if is_swedish_locale; then
-                    yad --info --title="$heading2" --text="$image_detected""\nIdentifierade grafikadaptrar:$gpuinfo""$support" --image=\$SUPPORT_QR
-                else
-                    yad --info --title="$heading2" --text="$image_detected""\nDetected Graphics Adapters:$gpuinfo""$support" --image=\$SUPPORT_QR
-                fi
-                ;;
-            esac
-        done
+    yad --warning --on-top --center --buttons-layout=center --text-align=center \
+        --title="$title" --text="$text" \
+        --button="$install_button:0" --button="$off_button:1"
+    if [[ $? -eq 1 ]]; then
+        systemctl poweroff || true
+        exit 0
     fi
 }
 block_low_memory_install
@@ -317,8 +138,6 @@ done
 
 
 nvidia_hardware_helper
-result=$?
-if [ $result -eq 0 ] || [ $result -eq 1 ] || [ $result -eq 124 ]; then
-    echo 'launch welcome dialog'
-    welcome_dialog
-fi
+# The USB stick is only for installing: start the installer straight away
+liveinst &
+disown $!

@@ -2,9 +2,9 @@ label: "RimFrost-Live"
 grub2:
   timeout: 5
   entries:
-    - name: "Try RimFrost OS (demo, can install)"
+    - name: "Install RimFrost OS"
       linux: "/images/pxeboot/vmlinuz quiet rhgb root=live:CDLABEL=RimFrost-Live enforcing=0 rd.live.image"
       initrd: "/images/pxeboot/initrd.img"
-    - name: "Try RimFrost OS (basic graphics)"
+    - name: "Install RimFrost OS (basic graphics)"
       linux: "/images/pxeboot/vmlinuz quiet rhgb root=live:CDLABEL=RimFrost-Live enforcing=0 rd.live.image nomodeset"
       initrd: "/images/pxeboot/initrd.img"

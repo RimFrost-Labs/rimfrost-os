@@ -148,7 +148,17 @@ EOF
 # Signed Images
 cat <<EOF >>/usr/share/anaconda/post-scripts/install-configure-upgrade.ks
 %post --erroronfail --log=/tmp/anacoda_custom_logs/bootc-switch.log
-bootc switch --mutate-in-place --enforce-container-sigpolicy --transport registry $imageref:$imagetag
+# RimFrost: one ISO for every PC. It installs the AMD/Intel system; on a PC
+# with a current Nvidia card (RTX, GTX 16) it points updates at the Nvidia
+# system, and rimfrost-finish-setup fetches it on the first start.
+target=$imageref
+support=\$(/usr/libexec/bazzite-detect-nvidia-support-status 2>/dev/null || true)
+echo "nvidia support status: '\$support'"
+if [[ "\$support" == supported ]]; then
+    target=$imageref-nvidia
+fi
+echo "update target: \$target:$imagetag"
+bootc switch --mutate-in-place --enforce-container-sigpolicy --transport registry "\$target:$imagetag"
 %end
 EOF
 

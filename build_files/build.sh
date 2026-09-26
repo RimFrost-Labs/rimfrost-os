@@ -133,6 +133,11 @@ ln -sf /usr/libexec/rimfrost-telemetry /usr/bin/rimfrost-telemetry
 install -m755 /ctx/framemeter/librimfrost_framemeter.so /usr/lib64/librimfrost_framemeter.so
 install -m644 /ctx/framemeter/rimfrost_framemeter.json     /usr/share/vulkan/implicit_layer.d/rimfrost_framemeter.x86_64.json
 
+### Finish setup on the first start ########################################
+# One ISO for every PC: on a current Nvidia card the installer points updates
+# at the Nvidia system, and this fetches it and restarts into it.
+systemctl enable rimfrost-finish-setup.service
+
 ### Package sources ##########################################################
 # Bazzite ships the terra repos disabled. bootc-image-builder still reads them
 # when making the ISO and fails on their file:// GPG keys, so keep them out of
@@ -184,6 +189,9 @@ lsinitrd -f usr/lib/initrd-release "/usr/lib/modules/$KVER/initramfs.img" > /tmp
 grep -q '^DEFAULT_HOSTNAME="rimfrost"' /tmp/initrd-release
 [[ "$(getcap /usr/bin/gsr-kms-server)" == *cap_sys_admin* ]]
 ! systemctl is-enabled rimfrost-telemetry.service >/dev/null 2>&1
+systemctl is-enabled rimfrost-finish-setup.service
+bash -n /usr/libexec/rimfrost-finish-setup
+command -v jq notify-send
 test -x /usr/lib64/librimfrost_framemeter.so
 test -f /etc/skel/.config/autostart/rimfrost-welcome.desktop
 ! test -e /etc/skel/.config/autostart/bazzite-portal.desktop

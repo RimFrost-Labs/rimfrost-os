@@ -49,12 +49,10 @@ elif [[ "$desktop_env" == "kde" ]]; then
     cp -a /src/system_files/kde/. /
 fi
 
-# RimFrost: the live session is the demo. It shows the demo welcome (in
-# on_gui_login.sh), not the first-login guide, and has a few pictures to open.
+# RimFrost: the USB session only installs (on_gui_login.sh starts the
+# installer), so no first-login guide and no first-start setup here.
 rm -f /etc/skel/.config/autostart/rimfrost-welcome.desktop
-mkdir -p /etc/skel/Pictures/RimFrost
-cp /usr/share/wallpapers/RimFrost/contents/images/*.png /etc/skel/Pictures/RimFrost/
-cp /usr/share/pixmaps/rimfrost-logo.png /etc/skel/Pictures/RimFrost/
+systemctl disable rimfrost-finish-setup.service 2>/dev/null || true
 
 # Run the preinitramfs hook
 "$SCRIPT_DIR/titanoboa_hook_preinitramfs.sh"

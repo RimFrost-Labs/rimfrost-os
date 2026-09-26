@@ -1,0 +1,13 @@
+[Unit]
+Description=RimFrost OS: finish setup on the first start (Nvidia driver)
+ConditionPathExists=!/var/lib/rimfrost/setup-done
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+ExecStart=/usr/libexec/rimfrost-finish-setup
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
