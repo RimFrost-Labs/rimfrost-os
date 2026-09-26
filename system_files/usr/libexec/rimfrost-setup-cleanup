@@ -9,10 +9,12 @@ set -euo pipefail
 
 done_flag=/var/lib/rimfrost/setup-cleaned
 ESP_TYPE=c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+from_setup=0   # set when anything of Setup's is found; otherwise nothing is touched
 
-# Firmware entry
-for n in $(efibootmgr 2>/dev/null | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\{0,1\} RimFrost OS Setup.*/\1/p'); do
+# Firmware entry (by name, or by its path in case the firmware renamed it)
+for n in $(efibootmgr 2>/dev/null | grep -iE 'RimFrost OS Setup|EFI.RimFrostSetup' | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\).*/\1/p'); do
     echo "removing firmware entry Boot$n"
+    from_setup=1
     efibootmgr -q -b "$n" -B || true
 done
 
@@ -29,6 +31,7 @@ while read -r dev type; do
     if [[ -d "$mnt/EFI/RimFrostSetup" ]]; then
         echo "removing $dev:/EFI/RimFrostSetup"
         rm -rf "$mnt/EFI/RimFrostSetup"
+        from_setup=1
     fi
     if [[ -n "$tmp" ]]; then umount "$tmp"; rmdir "$tmp"; fi
 done < <(lsblk -rno PATH,PARTTYPE)
@@ -41,7 +44,8 @@ while read -r dev label fstype; do
     esac
 done < <(lsblk -rno PATH,LABEL,FSTYPE)
 
-if (( ${#staging[@]} == 0 )); then
+(( ${#staging[@]} > 0 )) && from_setup=1
+if (( from_setup == 0 )); then
     mkdir -p "${done_flag%/*}" && touch "$done_flag"
     exit 0
 fi
@@ -67,7 +71,8 @@ done
 echo "growing $rootdisk partition $rootnum"
 echo ", +" | sfdisk --force --no-reread --no-tell-kernel -N "$rootnum" "$rootdisk"
 partx -u --nr "$rootnum" "$rootdisk"
-btrfs filesystem resize max "$(findmnt -no TARGET /sysroot 2>/dev/null || echo /)"
+# /sysroot is read-only on this system; /var is the same filesystem, writable
+btrfs filesystem resize max /var
 
 mkdir -p "${done_flag%/*}" && touch "$done_flag"
 echo "done"
