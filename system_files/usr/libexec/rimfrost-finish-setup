@@ -9,12 +9,15 @@ set -uo pipefail
 
 done_flag=/var/lib/rimfrost/setup-done
 
-status() { bootc status --format json 2>/dev/null; }
-wanted=$(status | jq -r '.spec.image.image // empty')
-booted=$(status | jq -r '.status.booted.image.image.image // empty')
-echo "wanted=$wanted booted=$booted"
+# What updates follow (the installer points this at the Nvidia system) versus
+# what is actually running. bootc reports the booted image by the same edited
+# origin, so the running system's own name comes from os-release instead.
+wanted=$(bootc status --format json 2>/dev/null | jq -r '.spec.image.image // empty')
+wanted=${wanted##*/}; wanted=${wanted%%[:@]*}
+running=$(. /usr/lib/os-release; echo "${RIMFROST_IMAGE:-}")
+echo "wanted=$wanted running=$running"
 
-if [[ -z "$wanted" || -z "$booted" || "$wanted" == "$booted" ]]; then
+if [[ -z "$wanted" || -z "$running" || "$wanted" == "$running" ]]; then
     mkdir -p "${done_flag%/*}" && touch "$done_flag"
     exit 0
 fi

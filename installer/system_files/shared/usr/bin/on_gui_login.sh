@@ -145,7 +145,7 @@ if [[ "$setup_mode" == next-to-windows ]]; then
     yad --info --on-top --center --buttons-layout=center --text-align=center --title="RimFrost OS" \
         --text="<b>You chose to keep Windows.</b>
 
-In the installer, pick your drive and choose <b>Use free space</b>.
+In the installer, pick your drive and choose <b>Share disk with other operating systems</b>.
 Don't choose <b>Use entire disk</b>: that erases Windows." \
         --button="Got it:0" || true
 elif [[ "$setup_mode" == replace-windows ]]; then

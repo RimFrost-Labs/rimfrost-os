@@ -122,7 +122,7 @@ namespace RimFrostSetup
                 steps.Add("BitLocker is paused for the next few restarts.");
             steps.Add("RimFrost OS is downloaded (about 8 GB) and checked.");
             steps.Add("Your PC restarts into the installer. " + (Mode == InstallMode.NextToWindows
-                ? "Choose \"Use free space\" there, so Windows is kept."
+                ? "Choose \"Share disk with other operating systems\" there, so Windows is kept."
                 : "Choose to erase the drive there."));
             steps.Add("When it's done, your PC restarts into RimFrost OS and Setup's leftovers are removed.");
             int n = 1;
@@ -204,7 +204,7 @@ namespace RimFrostSetup
             {
                 DoneTitle.Text = "Ready to install";
                 DoneText.Text = "Save your work. When your PC restarts, the RimFrost OS installer opens by itself." +
-                                (Mode == InstallMode.NextToWindows ? " Choose \"Use free space\" so Windows is kept." : "");
+                                (Mode == InstallMode.NextToWindows ? " Choose \"Share disk with other operating systems\" so Windows is kept." : "");
                 DoneNoteText.Text = "If your PC starts Windows instead, restart and open the boot menu (usually F12, F11, F8 or Esc) and pick \"RimFrost OS Setup\"." +
                                     (sys.SecureBoot == true ? " If it says the installer isn't allowed to start, allow third-party (Microsoft UEFI CA) certificates under Secure Boot in the firmware settings." : "");
             }
