@@ -116,7 +116,7 @@ namespace RimFrostSetup
         }
 
         /// cosign sign-blob: ECDSA P-256 over SHA-256, DER-encoded signature.
-        static bool VerifySignature(byte[] sha256, byte[] derSig)
+        internal static bool VerifySignature(byte[] sha256, byte[] derSig)
         {
             string pem;
             using (var s = Assembly.GetExecutingAssembly().GetManifestResourceStream("cosign.pub"))

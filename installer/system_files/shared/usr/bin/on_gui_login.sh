@@ -138,6 +138,25 @@ done
 
 
 nvidia_hardware_helper
+
+# Started by RimFrost Setup from Windows: remind which choice keeps Windows
+setup_mode=$(sed -n 's/.*rimfrost\.setup=\([a-z-]*\).*/\1/p' /proc/cmdline)
+if [[ "$setup_mode" == next-to-windows ]]; then
+    yad --info --on-top --center --buttons-layout=center --text-align=center --title="RimFrost OS" \
+        --text="<b>You chose to keep Windows.</b>
+
+In the installer, pick your drive and choose <b>Use free space</b>.
+Don't choose <b>Use entire disk</b>: that erases Windows." \
+        --button="Got it:0" || true
+elif [[ "$setup_mode" == replace-windows ]]; then
+    yad --info --on-top --center --buttons-layout=center --text-align=center --title="RimFrost OS" \
+        --text="<b>You chose to replace Windows.</b>
+
+In the installer, pick your drive and choose <b>Use entire disk</b>.
+Everything on that drive is erased." \
+        --button="Got it:0" || true
+fi
+
 # The USB stick is only for installing: start the installer straight away
 liveinst &
 disown $!
