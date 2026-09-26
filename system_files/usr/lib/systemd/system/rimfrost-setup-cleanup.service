@@ -1,0 +1,11 @@
+[Unit]
+Description=RimFrost OS: remove RimFrost Setup's installer partitions
+ConditionPathExists=!/var/lib/rimfrost/setup-cleaned
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/rimfrost-setup-cleanup
+
+[Install]
+WantedBy=multi-user.target

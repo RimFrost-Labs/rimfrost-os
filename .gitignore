@@ -9,3 +9,5 @@ _build-*/**
 /clipfrost-src/*
 !/clipfrost-src/.keep
 /framemeter/*.so
+setup/bin/
+setup/obj/

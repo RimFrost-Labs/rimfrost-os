@@ -28,18 +28,21 @@ done
 ### Identity ###################################################################
 # Keep ID=bazzite so Bazzite's own tools (ujust, the updater) keep working;
 # change what people see.
+# Our own release number. The first public release is a beta: 0.5.
+RIMFROST_VERSION="0.5 Beta"
 BASE_VERSION=$(sed -n 's/^OSTREE_VERSION=//p' /usr/lib/os-release | tr -d "'\"")
 sed -i \
     -e 's|^NAME=.*|NAME="RimFrost OS"|' \
-    -e 's|^PRETTY_NAME=.*|PRETTY_NAME="RimFrost OS"|' \
+    -e "s|^PRETTY_NAME=.*|PRETTY_NAME=\"RimFrost OS ${RIMFROST_VERSION}\"|" \
     -e 's|^DEFAULT_HOSTNAME=.*|DEFAULT_HOSTNAME="rimfrost"|' \
     -e 's|^HOME_URL=.*|HOME_URL="https://github.com/RimFrost-Labs/rimfrost-os"|' \
     -e 's|^BUG_REPORT_URL=.*|BUG_REPORT_URL="https://github.com/RimFrost-Labs/rimfrost-os/issues"|' \
     -e 's|^ANSI_COLOR=.*|ANSI_COLOR="0;38;2;170;214;240"|' \
     -e 's|^LOGO=.*|LOGO=rimfrost-logo|' \
-    -e "s|^BOOTLOADER_NAME=.*|BOOTLOADER_NAME=\"RimFrost OS (${BASE_VERSION})\"|" \
+    -e "s|^BOOTLOADER_NAME=.*|BOOTLOADER_NAME=\"RimFrost OS ${RIMFROST_VERSION} (${BASE_VERSION})\"|" \
     /usr/lib/os-release
 echo "RIMFROST_IMAGE=\"${IMAGE_NAME}\"" >> /usr/lib/os-release
+echo "RIMFROST_VERSION=\"${RIMFROST_VERSION}\"" >> /usr/lib/os-release
 # The initramfs still carries Bazzite's os-release, so systemd's fallback
 # hostname would stay "bazzite"; ship a real default instead.
 echo rimfrost > /etc/hostname
@@ -137,6 +140,9 @@ install -m644 /ctx/framemeter/rimfrost_framemeter.json     /usr/share/vulkan/imp
 # One ISO for every PC: on a current Nvidia card the installer points updates
 # at the Nvidia system, and this fetches it and restarts into it.
 systemctl enable rimfrost-finish-setup.service
+# Installed with RimFrost Setup (the Windows installer): remove its installer
+# partitions and ESP entry, and grow into their room.
+systemctl enable rimfrost-setup-cleanup.service
 
 ### Package sources ##########################################################
 # Bazzite ships the terra repos disabled. bootc-image-builder still reads them
@@ -190,6 +196,8 @@ grep -q '^DEFAULT_HOSTNAME="rimfrost"' /tmp/initrd-release
 [[ "$(getcap /usr/bin/gsr-kms-server)" == *cap_sys_admin* ]]
 ! systemctl is-enabled rimfrost-telemetry.service >/dev/null 2>&1
 systemctl is-enabled rimfrost-finish-setup.service
+systemctl is-enabled rimfrost-setup-cleanup.service
+bash -n /usr/libexec/rimfrost-setup-cleanup
 bash -n /usr/libexec/rimfrost-finish-setup
 command -v jq notify-send
 test -x /usr/lib64/librimfrost_framemeter.so

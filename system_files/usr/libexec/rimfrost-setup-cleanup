@@ -1,0 +1,73 @@
+#!/usr/bin/bash
+# RimFrost OS: remove what RimFrost Setup (the Windows installer, setup/) left
+# behind, once RimFrost OS is running from the drive:
+#   - the one-time firmware entry "RimFrost OS Setup" and \EFI\RimFrostSetup on the ESP
+#   - the RFBOOT (FAT32) and RFSETUP (exFAT) partitions
+# and grow RimFrost OS into the room they leave (Setup puts them right after
+# the free space RimFrost OS was installed into).
+set -euo pipefail
+
+done_flag=/var/lib/rimfrost/setup-cleaned
+ESP_TYPE=c12a7328-f81f-11d2-ba4b-00a0c93ec93b
+
+# Firmware entry
+for n in $(efibootmgr 2>/dev/null | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\{0,1\} RimFrost OS Setup.*/\1/p'); do
+    echo "removing firmware entry Boot$n"
+    efibootmgr -q -b "$n" -B || true
+done
+
+# \EFI\RimFrostSetup on every ESP
+while read -r dev type; do
+    [[ "$type" == "$ESP_TYPE" ]] || continue
+    mnt=$(findmnt -rno TARGET "$dev" | head -1 || true)
+    tmp=""
+    if [[ -z "$mnt" ]]; then
+        tmp=$(mktemp -d)
+        mount "$dev" "$tmp" 2>/dev/null || { rmdir "$tmp"; continue; }
+        mnt=$tmp
+    fi
+    if [[ -d "$mnt/EFI/RimFrostSetup" ]]; then
+        echo "removing $dev:/EFI/RimFrostSetup"
+        rm -rf "$mnt/EFI/RimFrostSetup"
+    fi
+    if [[ -n "$tmp" ]]; then umount "$tmp"; rmdir "$tmp"; fi
+done < <(lsblk -rno PATH,PARTTYPE)
+
+# Our partitions: exact label and filesystem, nothing else is touched
+staging=()
+while read -r dev label fstype; do
+    case "$label:$fstype" in
+        RFBOOT:vfat|RFSETUP:exfat) staging+=("$dev") ;;
+    esac
+done < <(lsblk -rno PATH,LABEL,FSTYPE)
+
+if (( ${#staging[@]} == 0 )); then
+    mkdir -p "${done_flag%/*}" && touch "$done_flag"
+    exit 0
+fi
+
+# The partition RimFrost OS runs from (btrfs, shown as /dev/xxxN[/subvol])
+rootdev=$(findmnt -no SOURCE /sysroot 2>/dev/null || findmnt -no SOURCE /)
+rootdev=${rootdev%%\[*}
+rootname=$(basename "$(readlink -f "$rootdev")")
+rootdisk=/dev/$(lsblk -no PKNAME "/dev/$rootname" | head -1)
+rootnum=$(cat "/sys/class/block/$rootname/partition")
+
+for dev in "${staging[@]}"; do
+    name=$(basename "$(readlink -f "$dev")")
+    disk=/dev/$(lsblk -no PKNAME "$dev" | head -1)
+    num=$(cat "/sys/class/block/$name/partition")
+    findmnt -rno TARGET "$dev" >/dev/null && umount "$dev"
+    echo "removing $dev (partition $num on $disk)"
+    sfdisk --force --no-reread --delete "$disk" "$num"
+    partx -d --nr "$num" "$disk" || true
+done
+
+# Grow the root partition into the freed room right after it, then btrfs
+echo "growing $rootdisk partition $rootnum"
+echo ", +" | sfdisk --force --no-reread --no-tell-kernel -N "$rootnum" "$rootdisk"
+partx -u --nr "$rootnum" "$rootdisk"
+btrfs filesystem resize max "$(findmnt -no TARGET /sysroot 2>/dev/null || echo /)"
+
+mkdir -p "${done_flag%/*}" && touch "$done_flag"
+echo "done"

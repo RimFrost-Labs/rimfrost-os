@@ -1,0 +1,138 @@
+<Window x:Class="RimFrostSetup.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="RimFrost Setup" Width="760" Height="600" MinWidth="640" MinHeight="540"
+        WindowStartupLocation="CenterScreen" Background="{StaticResource Night}"
+        Icon="rimfrost.ico" UseLayoutRounding="True" TextOptions.TextFormattingMode="Display">
+  <Grid Margin="36,28,36,24">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto" />
+      <RowDefinition Height="*" />
+      <RowDefinition Height="Auto" />
+    </Grid.RowDefinitions>
+
+    <!-- Brand and step -->
+    <DockPanel Grid.Row="0" Margin="0,0,0,22">
+      <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+        <Image Source="rimfrost.ico" Width="28" Height="28" Margin="0,0,10,0" />
+        <TextBlock Text="RimFrost" FontSize="19" FontWeight="SemiBold" VerticalAlignment="Center" />
+        <TextBlock Text=" OS" FontSize="19" Foreground="{StaticResource IceDim}" VerticalAlignment="Center" />
+        <Border BorderBrush="{StaticResource Warn}" BorderThickness="1" CornerRadius="4" Padding="6,1" Margin="10,0,0,0" VerticalAlignment="Center">
+          <TextBlock Text="0.5 BETA" FontSize="11" Foreground="{StaticResource Warn}" />
+        </Border>
+      </StackPanel>
+      <TextBlock x:Name="StepText" HorizontalAlignment="Right" VerticalAlignment="Center" Foreground="{StaticResource IceDim}" FontSize="13" />
+    </DockPanel>
+
+    <!-- Pages: exactly one is visible -->
+    <Grid Grid.Row="1">
+
+      <!-- 1. Checks -->
+      <DockPanel x:Name="PageCheck">
+        <StackPanel DockPanel.Dock="Top">
+          <TextBlock Style="{StaticResource H1}" Text="Install RimFrost OS" />
+          <TextBlock Style="{StaticResource Lede}" Text="No USB stick needed. Setup puts the installer on your drive, restarts your PC into it, and removes itself when RimFrost OS is installed. First, a quick look at your PC." />
+        </StackPanel>
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+          <StackPanel>
+            <TextBlock x:Name="CheckBusy" Text="Looking at your PC…" Foreground="{StaticResource Muted}" />
+            <ItemsControl x:Name="CheckList">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                  <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="28" />
+                      <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Text="{Binding Mark}" Foreground="{Binding MarkBrush}" FontSize="15" FontWeight="Bold" />
+                    <StackPanel Grid.Column="1">
+                      <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                      <TextBlock Text="{Binding Detail}" Foreground="{StaticResource Muted}" FontSize="13" />
+                    </StackPanel>
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Border x:Name="ResumeCard" Style="{StaticResource Card}" Visibility="Collapsed" Margin="0,8,0,0">
+              <StackPanel>
+                <TextBlock Text="Setup has been here before" FontWeight="SemiBold" />
+                <TextBlock Foreground="{StaticResource Muted}" FontSize="13" Margin="0,4,0,10"
+                           Text="The installer partitions from an earlier run are still on your drive. Continue where it stopped, or remove them and give the space back to Windows." />
+                <StackPanel Orientation="Horizontal">
+                  <Button x:Name="RemoveBtn" Style="{StaticResource Btn}" Margin="0" Content="Remove and give space back" Click="Remove_Click" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+          </StackPanel>
+        </ScrollViewer>
+      </DockPanel>
+
+      <!-- 2. Choose -->
+      <StackPanel x:Name="PageChoose" Visibility="Collapsed">
+        <TextBlock Style="{StaticResource H1}" Text="Where should RimFrost OS go?" />
+        <TextBlock Style="{StaticResource Lede}" Text="You can change your mind later: RimFrost OS can always be removed again from Windows' disk tools." />
+        <RadioButton x:Name="ModeNext" GroupName="mode" IsChecked="True" Margin="0,0,0,12" Checked="Mode_Changed">
+          <StackPanel>
+            <TextBlock Text="Next to Windows" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Foreground="{StaticResource Muted}" FontSize="13" Margin="0,2,0,10"
+                       Text="Keep Windows and all your files. You choose which one to start every time you turn on your PC." />
+            <DockPanel>
+              <TextBlock x:Name="SizeText" DockPanel.Dock="Right" Width="90" TextAlignment="Right" FontWeight="SemiBold" VerticalAlignment="Center" />
+              <Slider x:Name="SizeSlider" Minimum="64" Maximum="200" TickFrequency="8" IsSnapToTickEnabled="False"
+                      SmallChange="8" LargeChange="32" ValueChanged="Size_Changed" VerticalAlignment="Center" />
+            </DockPanel>
+            <TextBlock x:Name="SizeHint" Foreground="{StaticResource Muted}" FontSize="12" Margin="0,4,0,0" />
+          </StackPanel>
+        </RadioButton>
+        <RadioButton x:Name="ModeReplace" GroupName="mode" Checked="Mode_Changed">
+          <StackPanel>
+            <TextBlock Text="Replace Windows" FontSize="16" FontWeight="SemiBold" />
+            <TextBlock Foreground="{StaticResource Muted}" FontSize="13" Margin="0,2,0,0"
+                       Text="RimFrost OS gets the whole drive. Windows and every file on this drive are erased during the install." />
+          </StackPanel>
+        </RadioButton>
+      </StackPanel>
+
+      <!-- 3. Confirm -->
+      <StackPanel x:Name="PageConfirm" Visibility="Collapsed">
+        <TextBlock Style="{StaticResource H1}" Text="Ready when you are" />
+        <TextBlock Style="{StaticResource Lede}" Text="Here's what happens next." />
+        <Border Style="{StaticResource Card}" Margin="0,0,0,14">
+          <StackPanel x:Name="PlanList" />
+        </Border>
+        <Border x:Name="BetaCard" Style="{StaticResource Card}" BorderBrush="#5A4A2C" Margin="0,0,0,14">
+          <TextBlock FontSize="13" Foreground="{StaticResource Muted}">
+            <Run Foreground="{StaticResource Warn}" FontWeight="SemiBold" Text="This is a beta. " />
+            <Run Text="Most things work, but you may run into bugs. Changing the drive layout is safe, but a power cut at the wrong moment can still cost files." />
+          </TextBlock>
+        </Border>
+        <CheckBox x:Name="BackedUp" Content="I've backed up the files I care about" Checked="BackedUp_Changed" Unchecked="BackedUp_Changed" />
+      </StackPanel>
+
+      <!-- 4. Working -->
+      <StackPanel x:Name="PageWork" Visibility="Collapsed" VerticalAlignment="Center">
+        <TextBlock Style="{StaticResource H1}" Text="Setting things up" />
+        <TextBlock x:Name="WorkText" Style="{StaticResource Lede}" Text="Starting…" />
+        <ProgressBar x:Name="WorkBar" Height="6" Background="{StaticResource Steel}" Foreground="{StaticResource Ice}" BorderThickness="0" Minimum="0" Maximum="1" />
+        <TextBlock Foreground="{StaticResource Muted}" FontSize="12" Margin="0,12,0,0"
+                   Text="You can keep using your PC. If the connection drops, the download picks up where it stopped." />
+      </StackPanel>
+
+      <!-- 5. Done / failed -->
+      <StackPanel x:Name="PageDone" Visibility="Collapsed" VerticalAlignment="Center">
+        <TextBlock x:Name="DoneTitle" Style="{StaticResource H1}" Text="All set" />
+        <TextBlock x:Name="DoneText" Style="{StaticResource Lede}" />
+        <Border x:Name="DoneNote" Style="{StaticResource Card}">
+          <TextBlock x:Name="DoneNoteText" FontSize="13" Foreground="{StaticResource Muted}" />
+        </Border>
+      </StackPanel>
+    </Grid>
+
+    <!-- Buttons -->
+    <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+      <Button x:Name="BackBtn" Style="{StaticResource Btn}" Content="Back" Click="Back_Click" Visibility="Collapsed" />
+      <Button x:Name="CancelBtn" Style="{StaticResource Btn}" Content="Cancel" Click="Cancel_Click" />
+      <Button x:Name="NextBtn" Style="{StaticResource Primary}" Content="Next" Click="Next_Click" IsEnabled="False" />
+    </StackPanel>
+  </Grid>
+</Window>

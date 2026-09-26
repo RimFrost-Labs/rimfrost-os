@@ -117,7 +117,7 @@ for device in "${!mount[@]}"; do
         for dir in "$mnt"/EFI/*; do
             [ -d "$dir" ] || continue
             base=$(basename "$dir" | tr "[:upper:]" "[:lower:]")
-            [[ "$base" == "fedora" || "$base" == "boot" ]] && continue
+            [[ "$base" == "fedora" || "$base" == "boot" || "$base" == "rimfrostsetup" ]] && continue
             grub=("$dir"/grub*.efi)
             (( ! ${#grub[@]} )) && continue
             if [[ "$BAZZITE_INSTALLER_LOCALE" == sv* ]]; then
