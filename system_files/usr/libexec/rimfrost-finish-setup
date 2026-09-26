@@ -35,7 +35,7 @@ sleep 20   # let the desktop come up so the first message is seen
 notify "Setting up your Nvidia graphics driver" \
     "This happens in the background. Your PC restarts by itself when it's done."
 
-until curl -fsS -o /dev/null --max-time 15 https://ghcr.io/v2/; do
+until curl -sS -o /dev/null --max-time 15 https://ghcr.io/v2/; do   # any answer (it says 401) means online
     echo "waiting for internet"
     sleep 30
 done
