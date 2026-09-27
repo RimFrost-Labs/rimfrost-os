@@ -77,13 +77,9 @@ for defaults in /usr/share/plasma/look-and-feel/com.valve.*/contents/defaults; d
     sed -i 's|^Theme=com.valve.vapor$|Theme=org.rimfrost.splash|' "$defaults"
 done
 printf '[KSplash]\nEngine=KSplashQML\nTheme=org.rimfrost.splash\n' > /etc/xdg/ksplashrc
-# The login screen (Plasma Login Manager) shows our wallpaper too
-mkdir -p /etc/plasmalogin.conf.d
-cat > /etc/plasmalogin.conf.d/10-rimfrost.conf <<EOF
-[Greeter][Wallpaper][org.kde.image][General]
-Image=file://${WALLPAPER}
-PreviewImage=file://${WALLPAPER}
-EOF
+# The login screen (Plasma Login Manager) shows our wallpaper too. It reads
+# its greeter settings from defaults.conf (a conf.d drop-in is ignored).
+sed -i "s|file:///usr/share/backgrounds/default.jxl|file://${WALLPAPER}|g" /usr/lib/plasmalogin/defaults.conf
 # The installer already creates the account, so KDE's own first-start guide
 # (language, keyboard, user) would only ask the same things again
 systemctl disable plasma-setup.service
@@ -208,7 +204,7 @@ grep -q 'set-hostname rimfrost' /usr/libexec/bazzite-hardware-setup
 grep -q "$WALLPAPER" /etc/xdg/kscreenlockerrc
 jq -e --arg repo "ghcr.io/${IMAGE_VENDOR}" '.transports.docker[$repo]' /etc/containers/policy.json
 test -f "$WALLPAPER"
-grep -q "$WALLPAPER" /etc/plasmalogin.conf.d/10-rimfrost.conf
+grep -q "$WALLPAPER" /usr/lib/plasmalogin/defaults.conf
 ! systemctl is-enabled plasma-setup.service >/dev/null 2>&1
 grep -q "RimFrost OS" /usr/share/ublue-os/motd/template.md
 grep -q 'Theme=org.rimfrost.splash' /etc/xdg/ksplashrc
