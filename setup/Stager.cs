@@ -32,6 +32,8 @@ namespace RimFrostSetup
         const string BasicDataGpt = "{ebd0a0a2-b9e5-4433-87c0-68b6b72699c7}";
         const long MB = 1024L * 1024;
         public const long BootSize = 512 * MB;
+        /// Replacing Windows loads the installer into memory (about 7 GB).
+        public const long ReplaceMinRam = 15L * 1024 * MB; // "16 GB" PCs report a little less
 
         readonly SystemInfo sys;
         readonly InstallMode mode;
@@ -181,7 +183,11 @@ $p.DriveLetter").Trim();
         void WriteBootFiles(string isoLabel)
         {
             string modeArg = mode == InstallMode.NextToWindows ? "next-to-windows" : "replace-windows";
-            string args = $"quiet rhgb iso-scan/filename=/{Downloader.IsoName} root=live:CDLABEL={isoLabel} enforcing=0 rd.live.image rimfrost.setup={modeArg}";
+            // Replacing Windows erases the whole drive, including RFSETUP, so the
+            // installer must not run from it: rd.live.ram copies it into memory
+            // first (needs ReplaceMinRam). Next to Windows it runs from RFSETUP.
+            string ram = mode == InstallMode.ReplaceWindows ? " rd.live.ram=1" : "";
+            string args = $"quiet rhgb iso-scan/filename=/{Downloader.IsoName} root=live:CDLABEL={isoLabel} enforcing=0 rd.live.image{ram} rimfrost.setup={modeArg}";
             string cfg =
 $@"# Written by RimFrost Setup. Starts the RimFrost OS installer from the
 # {SetupLabel} partition; removed again after the install.

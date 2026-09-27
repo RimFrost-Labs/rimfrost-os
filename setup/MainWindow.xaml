@@ -89,6 +89,7 @@
             <TextBlock Text="Replace Windows" FontSize="16" FontWeight="SemiBold" />
             <TextBlock Foreground="{StaticResource Muted}" FontSize="13" Margin="0,2,0,0"
                        Text="RimFrost OS gets the whole drive. Windows and every file on this drive are erased during the install." />
+            <TextBlock x:Name="ReplaceHint" Visibility="Collapsed" Foreground="{StaticResource Warn}" FontSize="12" Margin="0,6,0,0" />
           </StackPanel>
         </RadioButton>
       </StackPanel>

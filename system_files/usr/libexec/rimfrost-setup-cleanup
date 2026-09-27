@@ -7,6 +7,13 @@
 # the free space RimFrost OS was installed into).
 set -euo pipefail
 
+# Only on the installed system: never from the installer/live session, which
+# runs from the very partitions this removes
+if [[ -e /run/initramfs/livedev || -e /run/initramfs/squashed.img ]] || grep -q 'rd.live.image' /proc/cmdline; then
+    echo "live session; nothing to do"
+    exit 0
+fi
+
 done_flag=/var/lib/rimfrost/setup-cleaned
 ESP_TYPE=c12a7328-f81f-11d2-ba4b-00a0c93ec93b
 from_setup=0   # set when anything of Setup's is found; otherwise nothing is touched

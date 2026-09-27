@@ -52,7 +52,14 @@ fi
 # RimFrost: the USB session only installs (on_gui_login.sh starts the
 # installer), so no first-login guide and no first-start setup here.
 rm -f /etc/skel/.config/autostart/rimfrost-welcome.desktop
-systemctl disable rimfrost-finish-setup.service 2>/dev/null || true
+# The first-start services belong to the installed system only. In the
+# installer session they would act on the PC being installed: setup-cleanup
+# would remove RimFrost Setup's boot files and partitions while the installer
+# runs from them (seen in a VM), dualboot would write a menu for no system.
+for unit in rimfrost-finish-setup rimfrost-setup-cleanup rimfrost-dualboot; do
+    systemctl disable "$unit.service" 2>/dev/null || true
+    systemctl mask "$unit.service"
+done
 
 # Run the preinitramfs hook
 "$SCRIPT_DIR/titanoboa_hook_preinitramfs.sh"

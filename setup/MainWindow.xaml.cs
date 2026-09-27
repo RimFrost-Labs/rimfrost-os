@@ -68,13 +68,22 @@ namespace RimFrostSetup
 
         void SetupSlider()
         {
+            bool canReplace = sys.RamBytes >= Stager.ReplaceMinRam;
+            if (!canReplace)
+            {
+                ModeReplace.IsEnabled = false;
+                ReplaceHint.Text = "Needs 16 GB of memory when started from Windows. With less, use the USB stick to replace Windows.";
+                ReplaceHint.Visibility = Visibility.Visible;
+            }
             long max = sys.MaxForRimFrost(StagingEstimate);
             double maxGb = Math.Floor(max / (double)SystemInfo.GB);
             if (maxGb < 64)
             {
                 ModeNext.IsEnabled = false;
-                ModeReplace.IsChecked = true;
+                ModeNext.IsChecked = false;
+                ModeReplace.IsChecked = canReplace;
                 SizeHint.Text = "Not enough room next to Windows on this drive.";
+                if (!canReplace) { blocked = true; NextBtn.IsEnabled = false; }
                 return;
             }
             SizeSlider.Maximum = maxGb;
@@ -124,7 +133,7 @@ namespace RimFrostSetup
             steps.Add("RimFrost OS is downloaded (about 8 GB) and checked.");
             steps.Add("Your PC restarts into the installer. " + (Mode == InstallMode.NextToWindows
                 ? "Choose \"Share disk with other operating systems\" there, so Windows is kept."
-                : "Choose to erase the drive there."));
+                : "Choose \"Use entire disk\" there; it erases Windows."));
             steps.Add("When it's done, your PC restarts into RimFrost OS and Setup's leftovers are removed.");
             int n = 1;
             foreach (var s in steps)

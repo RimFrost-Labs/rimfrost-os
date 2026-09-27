@@ -5,6 +5,9 @@
 # GRUB reads /boot/grub2/custom.cfg at the end of its own config.
 set -euo pipefail
 
+# Nothing to do in the installer/live session
+grep -q "rd.live.image" /proc/cmdline && exit 0
+
 cfg=/boot/grub2/custom.cfg
 marker="# Written by rimfrost-dualboot"
 
