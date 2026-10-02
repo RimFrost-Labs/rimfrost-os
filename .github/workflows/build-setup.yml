@@ -45,7 +45,7 @@ jobs:
           "$h  RimFrostSetup.exe" | Set-Content -NoNewline -Encoding ascii RimFrostSetup.exe.sha256
           Get-Content RimFrostSetup.exe.sha256
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: RimFrostSetup
           path: |
